@@ -12,6 +12,7 @@ up to all of them, because a miss costs 300 s and a full run costs about 40 s.
 
 import ast
 import json
+import operator
 import re
 import sys
 from pathlib import Path
@@ -20,6 +21,11 @@ import os
 DATA = Path(os.environ.get("BR_DATA", "/data"))
 APP = Path(__file__).resolve().parent
 SRC = APP / "src"
+if not SRC.exists() and (APP / "src.tgz").exists():          # running from a checkout
+    import tarfile, tempfile
+    _tmp = Path(tempfile.mkdtemp())
+    tarfile.open(APP / "src.tgz").extractall(_tmp, filter="data")
+    SRC = _tmp
 WORKER_COST = 2.0
 MAX_WORKERS = 8
 ALL = "ALL"
@@ -35,9 +41,19 @@ def log(*a):
 # --------------------------------------------------------------------------- map
 
 
+def load_data(name):
+    """data/<name>.json (unpacked by the Dockerfile), or data/<name>.json.gz when run from a checkout."""
+    p = APP / "data" / (name + ".json")
+    if p.exists():
+        return json.loads(p.read_text())
+    import gzip
+    with gzip.open(APP / "data" / (name + ".json.gz"), "rt") as f:
+        return json.load(f)
+
+
 class Map:
     def __init__(self, tests):
-        m = json.loads((APP / "data" / "map.json").read_text())
+        m = load_data("map")
         num = {t["id"]: t["number"] for t in tests}
         self.num = num
         self.tests = tests
@@ -54,14 +70,37 @@ class Map:
         self._set_cache = {}
         self.all = set(t["number"] for t in tests)
         self.attr = m.get("attr", {})
-        self.attr_fn = {k: set(v) for k, v in m.get("attr_fn", {}).items()}
+        self.attr_fn = m.get("attr_fn", {})   # name -> reading function -> owner classes
         self.body_refs = m.get("body_refs", {})
         self.mro = m.get("mro", {})
         self.creation_names = set(m.get("creation_names", ()))
+        self.hooks = m.get("hooks", [])
+        self._cmp = None
+        self.components = m.get("components", {})
         self.subs = {}          # class key -> owner keys that have it in their MRO
         for o, chain in self.mro.items():
             for c in chain:
                 self.subs.setdefault(c, set()).add(o)
+
+    def _load_cmp(self):
+        if self._cmp is None:
+            self._cmp = load_data("cmp")
+        return self._cmp
+
+    @property
+    def cmp_sites(self):
+        c = self._load_cmp()
+        if not isinstance(c.get("cmp_sites"), set):
+            c["cmp_sites"] = set(c.get("cmp_sites", ()))
+        return c["cmp_sites"]
+
+    @property
+    def cmp(self):
+        return self._load_cmp().get("cmp", {})
+
+    @property
+    def cmp_import(self):
+        return self._load_cmp().get("cmp_import", {})
 
     def conv(self, idxs):
         out = set()
@@ -370,6 +409,88 @@ def in_string(idx, line):
     return False
 
 
+def diff_path(a, b):
+    """Pairs of corresponding nodes from the roots down to the smallest subtree where two ASTs
+    differ, or None when they are equal.  Stops where more than one child differs."""
+    if ast.dump(a) == ast.dump(b):
+        return None
+    path = [(a, b)]
+    while True:
+        if type(a) is not type(b) or not isinstance(a, ast.AST):
+            return path
+        diffs = []
+        for f in a._fields:
+            va, vb = getattr(a, f, None), getattr(b, f, None)
+            if isinstance(va, list) or isinstance(vb, list):
+                if not (isinstance(va, list) and isinstance(vb, list)) or len(va) != len(vb):
+                    return path
+                for x, y in zip(va, vb):
+                    if isinstance(x, ast.AST) and isinstance(y, ast.AST):
+                        if ast.dump(x) != ast.dump(y):
+                            diffs.append((x, y))
+                    elif x != y:
+                        return path
+            elif isinstance(va, ast.AST) and isinstance(vb, ast.AST):
+                if ast.dump(va) != ast.dump(vb):
+                    diffs.append((va, vb))
+            elif va != vb:
+                return path
+        if len(diffs) != 1:
+            return path
+        a, b = diffs[0]
+        path.append((a, b))
+
+
+
+_UNKNOWN = object()
+
+
+def _decode(x):
+    if isinstance(x, dict):
+        if "tuple" in x:
+            items = [_decode(y) for y in x["tuple"]]
+            return _UNKNOWN if any(i is _UNKNOWN for i in items) else tuple(items)
+        return ("<enum>", x.get("enum"))      # equal only to the same member
+    if x == "?":
+        return _UNKNOWN
+    return x
+
+
+def _cmp_result(op, flags, a, b):
+    """Result of `a op b` from the profile: identity from the recorded flags (when the operands
+    are the recorded ones), anything else recomputed from known simple values; None if unknown."""
+    if op in ("Is", "IsNot"):
+        if flags is not None:
+            r = flags[0]
+        else:
+            a, b = _decode(a), _decode(b)
+            if a is _UNKNOWN or b is _UNKNOWN:
+                return None
+            if not (a is None or b is None or isinstance(a, bool) or isinstance(b, bool)):
+                return None
+            r = (a is None and b is None) or (isinstance(a, bool) and isinstance(b, bool) and a == b)
+        return r if op == "Is" else not r
+    if flags is not None and op in ("Eq", "NotEq") and flags[1] is not None:
+        return flags[1] if op == "Eq" else not flags[1]
+    a, b = _decode(a), _decode(b)
+    if a is _UNKNOWN or b is _UNKNOWN:
+        return None
+    ea = isinstance(a, tuple) and a[:1] == ("<enum>",)
+    eb = isinstance(b, tuple) and b[:1] == ("<enum>",)
+    if ea or eb:
+        if ea and eb and op in ("Eq", "NotEq"):
+            r = a == b                       # same member name of the same enum class
+            return r if op == "Eq" else not r
+        return None                          # str/int-mixin enums can equal plain values
+    if any(isinstance(x, tuple) and any(isinstance(y, tuple) and y[:1] == ("<enum>",) for y in x) for x in (a, b)):
+        return None
+    try:
+        return bool({"Eq": operator.eq, "NotEq": operator.ne, "Lt": operator.lt, "LtE": operator.le,
+                     "Gt": operator.gt, "GtE": operator.ge}[op](a, b))
+    except Exception:
+        return None
+
+
 def body_start(fs):
     """First line of a function's body: its def/decorator lines run at import, not when called."""
     return fs.node.body[0].lineno if fs.node.body else fs.start
@@ -497,49 +618,84 @@ class Analyzer:
 
 
     # -- a changed plain class attribute: tests that read it -------------------
-    def attr_change(self, path, chain, names, skip_lines):
-        """Tests that read class attribute(s) `names` of class `chain` in `path`, or None when the
-        change cannot be analysed that way (caller then falls back to a wider selection)."""
+    def attr_change(self, path, chain, names, skip_lines, same_shape=False):
+        """Tests that read class attribute(s) `names` of class `chain` in `path` (or any attribute
+        that class-creation hooks derive from them), or None when the change cannot be analysed
+        that way (the caller then falls back to a wider selection)."""
         m = self.m
         mod = module_of(path)
         cname = mod + ":" + ".".join(chain)
         if cname not in m.subs:
             return None
-        out = set()
         for name in names:
-            if not name or name.startswith("__") or name in m.creation_names:
+            if not name or name.startswith("__"):
                 return None
-            roots = {cname}
-            root_names = {chain[-1]}
-            refs = [r for r in m.body_refs.get(name, ())
-                    if not (r[0] == path and r[5] in skip_lines)]
-            changed = True
-            while changed:
-                changed = False
-                for f, cls, targets, base, kind, line in refs:
+        K = {cname}                       # classes whose attribute values may change
+        N = set(names)                    # attribute names whose values may change
+        hook_ids = set()
+        skip = {(path, ln) for ln in skip_lines}
+        changed = True
+        while changed:
+            changed = False
+            # attributes that class-creation hooks derive from the changed ones
+            for h in m.hooks:
+                if not (N & set(h["reads"])):
+                    continue
+                if h["kind"] != "self":
+                    return None            # metaclass logic (reads a class's own values at creation)
+                if not any(h["cls"] in m.mro.get(k, (k,)) for k in K):
+                    continue               # __init_subclass__ of another hierarchy
+                if N & set(h.get("opaque", ())):
+                    return None            # unmodelled use inside the hook
+                if not same_shape:
+                    return None            # a hook could fail on a value of another shape
+                hook_ids.add((h["file"], h["qual"]))
+                derived = {w for w, rs in h["deps"].items() if N & set(rs)}
+                if derived - N:
+                    N |= derived
+                    changed = True
+            # import-time code (class bodies, module level) that uses the changed values
+            root_names = {k.split(":")[1].split(".")[-1] for k in K}
+            for name in list(N):
+                for f, cls, targets, base, kind, line in m.body_refs.get(name, ()):
+                    if (f, line) in skip:
+                        continue
                     d = module_of(f) + ":" + cls
                     if kind == "string":
                         return None
                     if kind == "bare":
-                        if d in roots and targets != [name]:
-                            return None
-                        continue
-                    if base in root_names:
-                        if not cls or targets != [name]:
-                            return None      # copied into a module constant or another name
-                        if d not in roots:
-                            roots.add(d)
-                            root_names.add(cls.split(".")[-1])
-                            changed = True
-            for r in roots:
-                if r not in m.subs:
-                    return None
-            owners = set()
-            for r in roots:
-                owners |= m.subs[r]
-            if owners & m.attr_fn.get(name, set()):
+                        if d not in K:
+                            continue        # another class's own name, or a module global
+                    elif base not in root_names:
+                        continue            # read from an unrelated class
+                    if not cls or not targets or None in targets:
+                        return None         # copied into a module constant / something else
+                    if d not in K:
+                        K.add(d)
+                        changed = True
+                    if set(targets) - N:
+                        N |= set(targets)   # derived in that class body under another name
+                        changed = True
+        for k in K:
+            if k not in m.subs:
                 return None
-            reads = m.attr.get(name, {})
+        owners = set()
+        for k in K:
+            owners |= m.subs[k]
+        # reads made by functions while modules were imported or classes created
+        for n in N:
+            for fid, fowners in m.attr_fn.get(n, {}).items():
+                if not owners & set(fowners):
+                    continue
+                fname, _, qual = fid.partition(":")
+                if fname in ("covplugin.py", "brhooks.py"):
+                    continue
+                if any(fname == hf and (qual == hq or qual.startswith(hq + ".")) for hf, hq in hook_ids):
+                    continue
+                return None
+        out = set()
+        for n in N:
+            reads = m.attr.get(n, {})
             for o in owners:
                 sid = reads.get(o)
                 if sid is not None:
@@ -567,6 +723,55 @@ class Analyzer:
             return None   # functions / aliases of functions are not recorded attributes
         return names
 
+
+    def compare_change(self, path, old_node, new_node):
+        """If the only difference between two versions of a statement (or header) lies inside one
+        comparison, the tests that evaluated that comparison and could get a different result
+        (judged from the comparison profile); None when that does not apply."""
+        m = self.m
+        if not m.cmp_sites:
+            return None
+        dp = diff_path(old_node, new_node)
+        if not dp:
+            return None
+        oc = nc = None
+        for a, b in dp:
+            if isinstance(a, ast.Compare) and isinstance(b, ast.Compare) and len(a.ops) == 1 and len(b.ops) == 1:
+                oc, nc = a, b
+        if oc is None:
+            return None
+        site = "%s:%d:%d" % (path, oc.lineno, oc.col_offset)
+        if site not in m.cmp_sites:
+            return None
+        o, n = type(oc.ops[0]).__name__, type(nc.ops[0]).__name__
+        left_same = ast.dump(oc.left) == ast.dump(nc.left)
+        right_same = ast.dump(oc.comparators[0]) == ast.dump(nc.comparators[0])
+        lit = {}
+        for side, same, node in (("l", left_same, nc.left), ("r", right_same, nc.comparators[0])):
+            if not same:
+                try:
+                    lit[side] = ast.literal_eval(node)
+                except Exception:
+                    lit[side] = "?"           # not a literal: unknown value
+
+        def unsafe(vs):
+            v = json.loads(vs)
+            r_old = _cmp_result(o, v, v[2], v[3])
+            a = v[2] if left_same else lit["l"]
+            b = v[3] if right_same else lit["r"]
+            if left_same and right_same:
+                r_new = _cmp_result(n, v, a, b)
+            else:
+                r_new = _cmp_result(n, None, a, b)
+            return r_old is None or r_new is None or r_old != r_new
+
+        if any(unsafe(v) for v in m.cmp_import.get(site, ())):
+            return None                     # evaluated at import time with a result that could change
+        out = set()
+        for v, sid in m.cmp.get(site, {}).items():
+            if unsafe(v):
+                out |= m.set_tests(sid)
+        return out
 
     def inside_header(self, path, idx, old_lines, rem, add, pos):
         """A chunk confined to the header of an if/while/for/with inside a function (its condition,
@@ -604,6 +809,12 @@ class Analyzer:
         if ast.dump(ast.Module(nb.body, [])) != ast.dump(ast.Module(ob.body, [])) or \
                 ast.dump(ast.Module(getattr(nb, "orelse", []), [])) != ast.dump(ast.Module(getattr(ob, "orelse", []), [])):
             return None
+        hdr_old = getattr(ob, "test", None) or getattr(ob, "iter", None)
+        hdr_new = getattr(nb, "test", None) or getattr(nb, "iter", None)
+        if hdr_old is not None and hdr_new is not None:
+            r = self.compare_change(path, hdr_old, hdr_new)
+            if r is not None:
+                return r
         if self.m.import_ran(path, s.start, hend):
             return ALL
         return self.m.lines(path, s.start, hend)
@@ -638,6 +849,9 @@ class Analyzer:
             return None
         if ast.dump(tree.body[0]) == ast.dump(s.node):
             return set()          # only comments or layout changed inside the statement
+        r = self.compare_change(path, s.node, tree.body[0])
+        if r is not None:
+            return r
         m = self.m
         line = rem[0][0] if rem else pos
         names = self.class_stmt_attr(path, s)
@@ -648,7 +862,10 @@ class Analyzer:
             if new_names:
                 lam = any(isinstance(n, ast.Lambda) and n.lineno <= line <= n.end_lineno for n in ast.walk(s.node))
                 if not lam:
-                    r = self.attr_change(path, s.cls, sorted(set(names) | set(new_names)), set(range(s.start, s.end + 1)))
+                    ov, nv = s.node.value, tree.body[0].value
+                    same = type(ov) is type(nv) and (not isinstance(ov, ast.Constant) or type(ov.value) is type(nv.value))
+                    r = self.attr_change(path, s.cls, sorted(set(names) | set(new_names)), set(range(s.start, s.end + 1)),
+                                         same_shape=same)
                     if r is not None:
                         return r
         return self.stmt_impact(path, idx, s, line)
@@ -854,9 +1071,41 @@ class Analyzer:
 # ---------------------------------------------------------------------- selection
 
 
+_importers_cache = {}
+
+
+def test_importers(m, path):
+    """Tests of every test file that imports test module `path`, directly or through another."""
+    r = _importers_cache.get(path)
+    if r is not None:
+        return r
+    files = {path}
+    frontier = [path]
+    texts = {}
+    for f in m.by_file:
+        lines = src_lines(f)
+        if lines is not None:
+            texts[f] = "\n".join(lines)
+    while frontier:
+        p = frontier.pop()
+        mod = p[:-3].replace("/", ".")
+        pkg, _, base = mod.rpartition(".")
+        pat = re.compile(r"(^|\n)\s*(from\s+%s\s+import|import\s+%s\b|from\s+%s\s+import[^\n]*\b%s\b|from\s+\.\s+import[^\n]*\b%s\b|from\s+\.%s\s+import)"
+                         % (re.escape(mod), re.escape(mod), re.escape(pkg), re.escape(base), re.escape(base), re.escape(base)))
+        for f, t in texts.items():
+            if f not in files and pat.search(t):
+                files.add(f)
+                frontier.append(f)
+    out = set()
+    for f in files:
+        out |= set(m.by_file.get(f, ()))
+    _importers_cache[path] = out
+    return out
+
+
 def test_file_impact(m, fp):
     path = fp.old or fp.new
-    in_file = set(m.by_file.get(path, ()))
+    in_file = test_importers(m, path)      # the file's tests and those of files importing it
     if fp.is_new:
         return set()
     if fp.is_deleted:
@@ -909,9 +1158,11 @@ def test_file_impact(m, fp):
             return in_file
         pre = path + "::" + "::".join(k)
         hit = [t["number"] for t in m.tests if t["id"] == pre]
-        out |= set(hit)
         if not hit:
             return in_file
+        out |= set(hit)
+        # the same method inherited by test classes in other files
+        out |= {n for n in in_file if m.tests[n]["id"].endswith("::" + k[-1])}
     return out
 
 
@@ -962,7 +1213,9 @@ def select_for_file(m, an, fp, path, old):
         base = Path(path).name
         if base.startswith("test_"):
             return test_file_impact(m, fp)
-        return ALL
+        if base in ("__init__.py", "conftest.py") or fp.is_new or fp.is_deleted or fp.old != fp.new:
+            return ALL
+        return test_importers(m, path)      # shared test code such as tests/helpers.py
     if path.startswith("sqlglotc/"):
         return set(m.by_file.get("tests/test_sqlglotc.py", ())) | (ALL if not path.endswith(tuple(DOC_EXT)) else set())
     if path.startswith("sqlglot/"):

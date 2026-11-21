@@ -22,8 +22,8 @@ _TESTS_DIR = os.sep + "tests" + os.sep
 
 def _import_kind():
     f = sys._getframe(2)
-    if f.f_code.co_flags & 1:   # CO_OPTIMIZED: a function
-        return "IMPORT_FN"
+    if f.f_code.co_flags & 1:   # CO_OPTIMIZED: a function; record which one
+        return "IMPORT_FN:" + f.f_code.co_filename.rsplit(os.sep, 1)[-1] + ":" + f.f_code.co_qualname
     fn = f.f_code.co_filename
     return "IMPORT_BODY" if _SQLGLOT_DIR in fn and _TESTS_DIR not in fn else "IMPORT_FN"
 

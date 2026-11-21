@@ -80,6 +80,7 @@ def run_with_ctx(nodeid, blob):
         if cov:
             cov.switch_context("")
         _dump_attr(os.path.join(os.environ.get("COV_CLASSES_DIR", "/tmp"), "attrs.%d.jsonl" % os.getpid()))
+        _dump_prof("prof.%d.jsonl" % os.getpid())
         s = CLASSES.pop(nodeid, None)
         if s:
             with open(os.path.join(os.environ.get("COV_CLASSES_DIR", "/tmp"), "classes.%d.jsonl" % os.getpid()), "a") as f:
@@ -185,6 +186,32 @@ def _install_attrs():
 _WRITTEN = set()
 _MRO_WRITTEN = set()
 
+def _dump_prof(name):
+    bp = sys.modules.get("brprofile")
+    if bp is not None:
+        bp.dump(os.path.join(os.environ.get("COV_CLASSES_DIR", "/tmp"), name))
+
+def _dump_components(path):
+    """Dialect class -> its tokenizer/parser/generator classes (the metaclass reads them)."""
+    try:
+        from sqlglot.dialects.dialect import Dialect
+    except Exception:
+        return
+    out = {}
+    stack = [Dialect]
+    while stack:
+        d = stack.pop()
+        stack.extend(d.__subclasses__())
+        comps = []
+        for a in ("tokenizer_class", "jsonpath_tokenizer_class", "parser_class", "generator_class"):
+            c = d.__dict__.get(a)
+            c = c.v if isinstance(c, _Rec) else c
+            if isinstance(c, type):
+                comps.append(_key(c))
+        out[_key(d)] = comps
+    with open(path, "w") as f:
+        json.dump(out, f)
+
 def _dump_attr(path):
     _flush_attr_reads()
     lines = []
@@ -271,6 +298,8 @@ def pytest_runtest_protocol(item, nextitem):
 
 def pytest_sessionfinish(session):
     _dump_attr(os.path.join(os.environ.get("COV_CLASSES_DIR", "/tmp"), "attrs.main.jsonl"))
+    _dump_components(os.path.join(os.environ.get("COV_CLASSES_DIR", "/tmp"), "components.json"))
+    _dump_prof("prof.main.jsonl")
     out = os.environ.get("OPENS_OUT")
     if out:
         json.dump({k: sorted(v) for k, v in OPENS.items()}, open(out, "w"))
