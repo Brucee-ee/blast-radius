@@ -20,7 +20,7 @@ FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf107
 COPY selector.py tpgate.py tpcheck.py /app/
 COPY data /app/data
 COPY src.tgz /app/src.tgz
-COPY --from=tpc /b/tpc.pkl.gz /app/data/tpc.pkl.gz
+COPY --from=tpc /b/tpc.pkl.gz /b/tpc_full.pkl /app/data/
 COPY --from=tpc /sqlglot/tests/fixtures/optimizer/tpc-ds/tpc-ds.sql /app/data/tpc-ds.sql
 RUN python -c "import gzip, shutil, tarfile; \
 [shutil.copyfileobj(gzip.open('/app/data/%s.gz' % n), open('/app/data/%s' % n, 'wb')) for n in ('map.json', 'cmp.json', 'tpc.pkl')]; \
