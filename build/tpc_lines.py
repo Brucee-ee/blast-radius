@@ -42,5 +42,7 @@ for f in d.measured_files():
         if mask:
             q.setdefault(rel, {})[line] = mask
 data["qlines"] = q
+# modules the check never imports but this full-data run does count as imported too
+data["mods"] = sorted(set(data.get("mods", ())) | {m for m in sys.modules if m == "sqlglot" or m.startswith("sqlglot.")})
 pickle.dump(data, open(out, "wb"))
 print("files", len(q), "lines", sum(len(v) for v in q.values()))
