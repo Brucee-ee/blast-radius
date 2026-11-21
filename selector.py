@@ -1305,6 +1305,8 @@ def tpcds_unchanged(text):
         files = tpgate.relevant(parse_patch(text), apply_hunks, APP / "data" / "tpc-ds.sql")
         if not files:
             return True
+        if tpgate._edits(files) is None and not any((p or "").startswith("sqlglot/executor/") for fp in files for p in (fp.old, fp.new)):
+            return True  # EXPERIMENT exp9: drop when refused outright, executor edits excepted
         if tpgate.touches(files, chunks, _tp["rt"]):
             return False
         mask = tpgate.queries_reached(files, SRC, chunks, _tp["q"])
