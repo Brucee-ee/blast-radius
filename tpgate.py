@@ -153,8 +153,6 @@ def _edits(files):
             return None  # rename
         if not path.startswith("sqlglot/") or not path.endswith(".py"):
             return None
-        if path.startswith("sqlglot/executor/"):
-            return None
         edits.append((fp, path))
     return edits or None
 
