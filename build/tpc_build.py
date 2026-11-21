@@ -22,6 +22,7 @@ here = os.path.dirname(os.path.abspath(__file__))
 lines = subprocess.run([sys.executable, os.path.join(here, "..", "tpcheck.py"), root, out, "dump"],
                        capture_output=True, text=True, check=True).stdout.split("\n")
 lines = [l.split() for l in lines if l.strip()]
+data["mods"] = lines.pop()[1].split(",")  # sqlglot modules the check's pipeline imports
 assert len(lines) == len(queries), (len(lines), len(queries))
 data["fp"] = [l[0] for l in lines]
 data["duck"] = [l[1] if len(l) > 1 else "" for l in lines]
