@@ -21,6 +21,7 @@ COPY selector.py tpgate.py tpcheck.py /app/
 COPY data /app/data
 COPY src.tgz /app/src.tgz
 COPY --from=tpc /b/tpc.pkl.gz /app/data/tpc.pkl.gz
+COPY --from=tpc /sqlglot/tests/fixtures/optimizer/tpc-ds/tpc-ds.sql /app/data/tpc-ds.sql
 RUN python -c "import gzip, shutil, tarfile; \
 [shutil.copyfileobj(gzip.open('/app/data/%s.gz' % n), open('/app/data/%s' % n, 'wb')) for n in ('map.json', 'cmp.json', 'tpc.pkl')]; \
 tarfile.open('/app/src.tgz').extractall('/app/src', filter='data')" \
