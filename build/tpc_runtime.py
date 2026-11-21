@@ -1,5 +1,6 @@
 """Build-time: lines (outside sqlglot/executor) the Python executor runs on the full TPC-DS data
-while not generating code; stored as "rt" in the data pickle given as argv[2]."""
+while not generating code, minus those it also runs on the sampled tables tpcheck.py executes
+(whose outcome tpcheck.py therefore sees); stored as "rt" in the data pickle given as argv[2]."""
 import sys, coverage, pickle
 root = sys.argv[1]; sys.path.insert(0, root)
 cov = coverage.Coverage(data_file=None, source=[root + '/sqlglot'])
@@ -25,15 +26,24 @@ def gen(self, e):
     finally:
         if depth[0]: cov.start()
 pyexec.PythonExecutor.execute = ex; pyexec.PythonExecutor.generate = gen
-for meta, sql, _ in C.tpcds_sqls:
-    e = pickle.loads(pickle.dumps(parse_one(sql)))
-    te.mp_execute(e, meta)
-d = cov.get_data()
+def lines_run(tables):
+    cov.erase()
+    for meta, sql, _ in C.tpcds_sqls:
+        e = pickle.loads(pickle.dumps(parse_one(sql)))
+        if meta.get("execute"):
+            execute(e, schema=te.TPCDS_SCHEMA, tables={t.name: tables[t.name] for t in find_tables(e)})
+    d = cov.get_data()
+    return {f[len(root)+1:]: set(d.lines(f) or []) for f in d.measured_files()}
+from sqlglot import find_tables
+from sqlglot.executor import execute
+from sqlglot.executor.table import Table
+d0 = pickle.load(open(sys.argv[2], "rb"))
+full = lines_run(C.tpcds_tables)
+small = lines_run({n: Table(columns=c, rows=r) for n, (c, r) in d0["tables"].items()})
 out = {}
-for f in d.measured_files():
-    rel = f[len(root)+1:]
+for rel, ls in full.items():
     if rel.startswith('sqlglot/executor/'): continue
-    ls = sorted(d.lines(f) or [])
+    ls = sorted(ls - small.get(rel, set()))
     if ls: out[rel] = ls
-d0 = pickle.load(open(sys.argv[2], "rb")); d0["rt"] = out; pickle.dump(d0, open(sys.argv[2], "wb"))
+d0["rt"] = out; pickle.dump(d0, open(sys.argv[2], "wb"))
 print("runtime lines", sum(len(v) for v in out.values()))
