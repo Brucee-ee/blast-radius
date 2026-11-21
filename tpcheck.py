@@ -62,6 +62,15 @@ def main():
 
     ex.Plan = rec_plan
 
+    current = [None]
+    if os.environ.get("BR_TP_EXEC") == "1":
+        # the patch only touches the executor's own modules (not executor/__init__.py, which
+        # calls the optimizer): the optimizer's output is the pinned one, stored at build time
+        def stored_optimize(*a, **k):
+            return pickle.loads(data["opt"][current[0]])
+
+        ex.optimize = stored_optimize
+
     tables = {name: Table(columns=cols, rows=rows) for name, (cols, rows) in data["tables"].items()}
     schema = data["schema"]
     full = []
@@ -84,6 +93,7 @@ def main():
         if only is not None and i not in only:
             continue
         rec.clear()
+        current[0] = i
         duck = err = None
         try:
             e = pickle.loads(pickle.dumps(parse_one(sql)))
