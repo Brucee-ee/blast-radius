@@ -5,6 +5,7 @@ and tpcheck.py reruns the test's pipeline on it.  Any doubt keeps the test.
 """
 import ast
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -110,6 +111,10 @@ def _func_ranges(text):
     return out
 
 
+def _def_names(lines):
+    return sorted(m.group(1) for m in (re.match(r"\s*(?:async\s+)?def\s+(\w+)", t) for t in lines) if m)
+
+
 def queries_reached(files, src, chunks, qlines):
     """Bitmask of TPC-DS queries that run a function the patch edits, or None when an edit is
     outside a function body (module or class level, decorators, signatures, new or deleted
@@ -126,11 +131,13 @@ def queries_reached(files, src, chunks, qlines):
                 lo, hi = rem[0][0], rem[-1][0]
             else:
                 lo, hi = pos, pos + 1
-            # an edit to a def line (name, parameters, defaults) only matters to its callers
+            # an edit to a def line (parameters, defaults) only matters to its callers
             inner = [r for r in ranges if r[0] <= lo and hi <= r[2]]
             if not inner:
                 return None
-            _, a, b = max(inner)
+            head, a, b = max(inner)
+            if any(no == head for no, _ in rem) and _def_names(t for _, t in rem) != _def_names(add):
+                return None  # a renamed function can shadow another one: check every query
             for line in range(a, b + 1):
                 mask |= ql.get(line, 0)
     return mask
