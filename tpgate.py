@@ -13,6 +13,67 @@ from pathlib import Path
 SCRATCH = Path("/tmp/brtp")
 
 
+_KEEP_TESTS = ("tests/test_executor.py", "tests/helpers.py", "tests/__init__.py")
+
+
+def _ignorable(path):
+    """Files the TPC-DS test never reads: other test modules, fixtures other than the TPC-H and
+    TPC-DS data its class loads, docs."""
+    if path.startswith("tests/"):
+        if path in _KEEP_TESTS or "conftest" in path or path.startswith(("tests/fixtures/optimizer/tpc-ds/", "tests/fixtures/optimizer/tpc-h/")):
+            return False
+        return path.startswith("tests/fixtures/") or (
+            path.endswith(".py") and os.path.basename(path).startswith("test_"))
+    return path.startswith("docs/") or path.endswith((".md", ".rst"))
+
+
+TPCDS_SQL = "tests/fixtures/optimizer/tpc-ds/tpc-ds.sql"
+TPCH_SQL = "tests/fixtures/optimizer/tpc-h/tpc-h.sql"
+
+
+def _pairs(text):
+    """(meta, sql) of each query, as tests/helpers.py load_sql_fixture_pairs reads them; the
+    expected optimized SQL that follows each query is not used by test_execute_tpcds."""
+    statements = "\n".join(l for l in text.splitlines() if l and not l.startswith("--")).split(";")
+    out = []
+    for i in range(0, len(statements), 2):
+        if i + 1 < len(statements):
+            lines = statements[i].strip().split("\n")
+            meta = []
+            j = 0
+            while lines[j].startswith("#"):
+                key, val = lines[j].split(":", maxsplit=1)
+                meta.append((key.lstrip("#").strip(), val.strip()))
+                j += 1
+            out.append((meta, "\n".join(lines[j:])))
+    return out
+
+
+def _same_queries(fp, apply_hunks, fixture):
+    try:
+        old = fixture.read_text(encoding="utf-8")
+        new = apply_hunks(old.split("\n"), fp)
+        return new is not None and _pairs("\n".join(new)) == _pairs(old)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def relevant(files, apply_hunks=None, fixture=None):
+    """The patch's files minus those the test cannot see: other test modules and fixtures,
+    docs, an edit of tpc-h.sql (setUpClass only splits it), and an edit of tpc-ds.sql that
+    leaves every query and its meta as they were (only the expected outputs changed)."""
+    out = []
+    for fp in files:
+        plain = not (fp.binary or fp.is_new or fp.is_deleted) and fp.old == fp.new
+        if fp.binary or not all(p is None or _ignorable(p) for p in (fp.old, fp.new)):
+            if plain and fp.old == TPCH_SQL:
+                continue
+            if plain and fp.old == TPCDS_SQL and apply_hunks and fixture and _same_queries(fp, apply_hunks, fixture):
+                continue
+            out.append(fp)
+    return out
+
+
 def _ensure_base(src):
     dst = SCRATCH / "sqlglot"
     if not dst.exists():
