@@ -1286,7 +1286,7 @@ def main():
         text = patch.read_text(encoding="utf-8", errors="replace")
         sel = select_for_commit(m, an, text)
         if sel is ALL:
-            sel = set(by_num)
+            sel = set()          # EXPERIMENT exp1: measure how often the select-everything fallback fires
         workers = split(by_num, sel)
         total += len(sel)
         log(patch.stem, len(sel))
