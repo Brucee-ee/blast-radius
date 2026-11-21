@@ -1103,6 +1103,20 @@ def test_importers(m, path):
     return out
 
 
+def _qual(tree, fn):
+    """(Class, ..., name) path of function node `fn` inside `tree`."""
+    def walk(body, prefix):
+        for x in body:
+            if x is fn:
+                return prefix + (x.name,)
+            if isinstance(x, ast.ClassDef):
+                r = walk(x.body, prefix + (x.name,))
+                if r:
+                    return r
+        return None
+    return walk(tree.body, ())
+
+
 def test_file_impact(m, fp):
     path = fp.old or fp.new
     in_file = test_importers(m, path)      # the file's tests and those of files importing it
@@ -1145,9 +1159,21 @@ def test_file_impact(m, fp):
                 n.body = [ast.Pass()]
         return ast.dump(strip_docstrings(t))
 
+    fa, fb = funcs(a), funcs(b)
+    added = {k for k in fb if k not in fa}
+    if added and all(k[-1].startswith("test") for k in added):
+        # new test methods only: drop them before comparing (they are not in tests.json and
+        # cannot change existing tests unless they reuse a name, which `added` excludes)
+        b2 = ast.parse(ast.unparse(b))
+        for n in ast.walk(b2):
+            if isinstance(n, (ast.Module, ast.ClassDef)):
+                stack = []
+                n.body = [x for x in n.body if not (isinstance(x, FUNCS) and x.name.startswith("test")
+                                                     and _qual(b2, x) in added)] or [ast.Pass()]
+        b = b2
+        fb = funcs(b)
     if skeleton(a) != skeleton(b):
         return in_file
-    fa, fb = funcs(a), funcs(b)
     changed = set()
     for k in set(fa) | set(fb):
         if k not in fa or k not in fb or ast.dump(strip_docstrings(ast.Module([fa[k]], []))) != ast.dump(strip_docstrings(ast.Module([fb[k]], []))):
