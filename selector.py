@@ -42,7 +42,12 @@ def log(*a):
 
 
 def load_data(name):
-    """data/<name>.json (unpacked by the Dockerfile), or data/<name>.json.gz when run from a checkout."""
+    """data/<name>.marshal (made by the Dockerfile from the .json, quicker to load), data/<name>.json,
+    or data/<name>.json.gz when run from a checkout."""
+    p = APP / "data" / (name + ".marshal")
+    if p.exists():
+        import marshal
+        return marshal.loads(p.read_bytes())
     p = APP / "data" / (name + ".json")
     if p.exists():
         return json.loads(p.read_text())
