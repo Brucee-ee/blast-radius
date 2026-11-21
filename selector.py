@@ -1301,6 +1301,7 @@ def tpcds_unchanged(text):
             with open(data, "rb") as f:
                 d = pickle.load(f)
             _tp["rt"], _tp["q"], _tp["n"] = d["rt"], d["qlines"], len(d["queries"])
+            _tp["mods"] = set(d["mods"]) if "mods" in d else None
         files = tpgate.relevant(parse_patch(text), apply_hunks, APP / "data" / "tpc-ds.sql")
         if not files:
             return True
@@ -1310,7 +1311,7 @@ def tpcds_unchanged(text):
         only = None if mask is None else [i for i in range(_tp["n"]) if mask >> i & 1]
         if only == []:
             return tpgate.applies(files, SRC, apply_hunks)
-        return tpgate.unchanged(files, SRC, apply_hunks, data, APP / "tpcheck.py", only)
+        return tpgate.unchanged(files, SRC, apply_hunks, data, APP / "tpcheck.py", only, mods=_tp["mods"])
     except Exception:  # noqa: BLE001
         return False
     finally:
