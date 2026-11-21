@@ -106,7 +106,8 @@ def main():
             except Exception:  # noqa: BLE001
                 sys.exit(1)
     if dump:
-        sys.stdout.write("\n".join("%s %s" % x if x[1] else x[0] for x in out) + "\n")
+        mods = sorted(m for m in sys.modules if m == "sqlglot" or m.startswith("sqlglot."))
+        sys.stdout.write("\n".join("%s %s" % x if x[1] else x[0] for x in out) + "\nMODS " + ",".join(mods) + "\n")
     sys.exit(0)
 
 
