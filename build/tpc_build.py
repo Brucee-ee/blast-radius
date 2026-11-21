@@ -39,6 +39,11 @@ for execute_flag, sql in queries:
     costs.append(time.process_time() - t0)
     results.append(hashlib.sha1("\x00".join((repr(r.columns), repr(r.rows))).encode("utf-8", "replace")).hexdigest())
 data["full"] = results
+from sqlglot.optimizer import optimize
+from sqlglot.schema import ensure_schema
+data["opt"] = [pickle.dumps(optimize(pickle.loads(pickle.dumps(parse_one(sql))), ensure_schema(TPCDS_SCHEMA),
+                                     leave_tables_isolated=True)) if execute_flag else None
+               for execute_flag, sql in queries]  # what execute() gets from the optimizer, per query
 data["full_cost"] = costs
 pickle.dump(data, open(out, "wb"))
 print("queries", len(queries), "executed", sum(q[0] for q in queries), "rows", sum(len(r) for _, r in tables.values()), "size", os.path.getsize(out))
