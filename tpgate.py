@@ -173,11 +173,23 @@ def applies(files, src, apply_hunks):
     return True
 
 
-def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60):
+def _module(path):
+    mod = path[:-3].replace("/", ".")
+    return mod[: -len(".__init__")] if mod.endswith(".__init__") else mod
+
+
+def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60, mods=None):
     """True only when the patch provably leaves the TPC-DS pipeline's outputs alone."""
     edits = _edits(files)
     if not edits:
         return False
+    if mods is not None and all(_module(path) not in mods for _, path in edits):
+        # the pipeline never imports the patched modules, so the check could only agree
+        try:
+            return all(fp.is_new or fp.is_deleted or apply_hunks(
+                (src / path).read_text(encoding="utf-8").split("\n"), fp) is not None for fp, path in edits)
+        except OSError:
+            return False
     try:
         base = _ensure_base(src)
     except OSError:
