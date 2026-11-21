@@ -1288,6 +1288,8 @@ def main():
         if sel is ALL:
             sel = set(by_num)
         workers = split(by_num, sel)
+        if workers and len(sel) != len(by_num) and max(sum(round(by_num[n]["seconds"] * 1000) for n in w) for w in workers) / 1000 + 2 * len(workers) >= 8:
+            workers = []  # EXPERIMENT exp2: measure the cost and failures of expensive (>= 8 s) selections
         total += len(sel)
         log(patch.stem, len(sel))
         print(json.dumps({"commit": patch.stem, "workers": workers}))
