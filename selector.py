@@ -52,6 +52,15 @@ class Map:
         self.refs = m["refs"]
         self._set_cache = {}
         self.all = set(t["number"] for t in tests)
+        self.attr = m.get("attr", {})
+        self.attr_fn = {k: set(v) for k, v in m.get("attr_fn", {}).items()}
+        self.body_refs = m.get("body_refs", {})
+        self.mro = m.get("mro", {})
+        self.creation_names = set(m.get("creation_names", ()))
+        self.subs = {}          # class key -> owner keys that have it in their MRO
+        for o, chain in self.mro.items():
+            for c in chain:
+                self.subs.setdefault(c, set()).add(o)
 
     def conv(self, idxs):
         out = set()
@@ -331,6 +340,21 @@ def src_index(path):
     return r
 
 
+def in_string(idx, line):
+    """True when `line` lies inside a multi-line string literal (so a leading # is not a comment)."""
+    s = idx.innermost(line)
+    if s is None:
+        return False
+    node = s.node
+    if s.compound:
+        return False
+    for n in ast.walk(node):
+        if isinstance(n, (ast.Constant, ast.JoinedStr)) and n.lineno < line <= n.end_lineno:
+            if isinstance(n, ast.JoinedStr) or isinstance(n.value, (str, bytes)):
+                return True
+    return False
+
+
 def module_of(path):
     p = path[:-3] if path.endswith(".py") else path
     p = p.replace("/", ".")
@@ -451,6 +475,121 @@ class Analyzer:
         return bool(re.search(r"from\s+" + re.escape(parent) + r"\s+import[^\n]*\b" + re.escape(base) + r"\b", txt)) \
             or bool(re.search(r"import\s+" + re.escape(parent) + r"\s*\n", txt))
 
+
+    # -- a changed plain class attribute: tests that read it -------------------
+    def attr_change(self, path, chain, names, skip_lines):
+        """Tests that read class attribute(s) `names` of class `chain` in `path`, or None when the
+        change cannot be analysed that way (caller then falls back to a wider selection)."""
+        m = self.m
+        mod = module_of(path)
+        cname = mod + ":" + ".".join(chain)
+        if cname not in m.subs:
+            return None
+        out = set()
+        for name in names:
+            if not name or name.startswith("__") or name in m.creation_names:
+                return None
+            roots = {cname}
+            root_names = {chain[-1]}
+            refs = [r for r in m.body_refs.get(name, ())
+                    if not (r[0] == path and r[5] in skip_lines)]
+            changed = True
+            while changed:
+                changed = False
+                for f, cls, targets, base, kind, line in refs:
+                    d = module_of(f) + ":" + cls
+                    if kind == "string":
+                        return None
+                    if kind == "bare":
+                        if d in roots and targets != [name]:
+                            return None
+                        continue
+                    if base in root_names:
+                        if not cls or targets != [name]:
+                            return None      # copied into a module constant or another name
+                        if d not in roots:
+                            roots.add(d)
+                            root_names.add(cls.split(".")[-1])
+                            changed = True
+            for r in roots:
+                if r not in m.subs:
+                    return None
+            owners = set()
+            for r in roots:
+                owners |= m.subs[r]
+            if owners & m.attr_fn.get(name, set()):
+                return None
+            reads = m.attr.get(name, {})
+            for o in owners:
+                sid = reads.get(o)
+                if sid is not None:
+                    out |= m.set_tests(sid)
+        return out
+
+    def class_stmt_attr(self, path, s, extra_new=None):
+        """If statement `s` is a plain assignment in a class body, the attribute names it sets."""
+        node = s.node
+        if s.func is not None or not s.cls:
+            return None
+        if isinstance(node, ast.Assign):
+            tg = node.targets
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            tg = [node.target]
+        else:
+            return None
+        names = []
+        for t in tg:
+            if not isinstance(t, ast.Name):
+                return None
+            names.append(t.id)
+        v = node.value
+        if isinstance(v, (ast.Lambda,)) or isinstance(v, ast.Name) and v.id[:1].islower():
+            return None   # functions / aliases of functions are not recorded attributes
+        return names
+
+
+    def inside_statement(self, path, idx, old_lines, rem, add, pos):
+        """A chunk that only rewrites the inside of one simple statement: the tests that ran it
+        (or, for a class attribute, that read it).  None when the chunk is anything else."""
+        if rem:
+            first, last = rem[0][0], rem[-1][0]
+            s = idx.innermost(first)
+            if s is None or s.compound or not (s.start <= first and last <= s.end):
+                return None
+            if any(idx.innermost(n) is not s for n, _ in rem if not is_comment_or_blank(old_lines[n - 1])):
+                return None
+            new = old_lines[s.start - 1:first - 1] + add + old_lines[last:s.end]
+        else:
+            s = idx.innermost(pos)
+            if s is None or s.compound or not (s.start <= pos < s.end):
+                return None
+            new = old_lines[s.start - 1:pos] + add + old_lines[pos:s.end]
+        if isinstance(s.node, FUNCS + (ast.ClassDef,)):
+            return None
+        import textwrap
+        try:
+            tree = ast.parse(textwrap.dedent("\n".join(new)))
+        except SyntaxError:
+            return None
+        if len(tree.body) != 1 or type(tree.body[0]) is not type(s.node):
+            return None
+        if ast.dump(tree.body[0]) == ast.dump(s.node):
+            return set()          # only comments or layout changed inside the statement
+        m = self.m
+        line = rem[0][0] if rem else pos
+        names = self.class_stmt_attr(path, s)
+        if names:
+            ns = Stmt()
+            ns.node, ns.func, ns.cls, ns.start, ns.end, ns.compound, ns.parent = tree.body[0], None, s.cls, 0, 0, False, None
+            new_names = self.class_stmt_attr(path, ns)
+            if new_names:
+                lam = any(isinstance(n, ast.Lambda) and n.lineno <= line <= n.end_lineno for n in ast.walk(s.node))
+                if not lam:
+                    r = self.attr_change(path, s.cls, sorted(set(names) | set(new_names)), set(range(s.start, s.end + 1)))
+                    if r is not None:
+                        return r
+        return self.stmt_impact(path, idx, s, line)
+
     # -- impact of statement containing old line ------------------------------
     def stmt_impact(self, path, idx, s, line, depth=0, name_scan=False):
         m = self.m
@@ -458,6 +597,8 @@ class Analyzer:
         # function definition header (signature, decorators, def line) or a line of a def not in a child
         if isinstance(node, FUNCS):
             return m.lines(path, s.start, s.end)
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            return set()          # a docstring / bare string: no runtime effect (doctests are not in the suite)
         if isinstance(node, ast.ClassDef):
             own = Stmt()
             own.node, own.start, own.end = node, s.start, s.end
@@ -476,10 +617,17 @@ class Analyzer:
             if isinstance(n, ast.Lambda) and n.lineno <= line <= n.end_lineno:
                 lam = n
                 break
-        if lam is not None:
+        if lam is not None and not (s.cls and s.func is None):
             return m.lines(path, lam.lineno, lam.end_lineno) | (m.lines(path, line, line))
+        if lam is not None:
+            return m.lines(path, lam.lineno, lam.end_lineno) | m.lines(path, line, line)
         if s.compound:
             return m.lines(path, s.start, s.end) | self.import_impact(path, s, depth)
+        names = self.class_stmt_attr(path, s)
+        if names and not name_scan:
+            r = self.attr_change(path, s.cls, names, set(range(s.start, s.end + 1)))
+            if r is not None:
+                return r | (m.lines(path, lam.lineno, lam.end_lineno) if lam is not None else set())
         return self.import_impact(path, s, depth)
 
     # -- one python source file under sqlglot/ --------------------------------
@@ -498,19 +646,22 @@ class Analyzer:
         if new_lines is None or idx is None:
             return ALL
         try:
-            new_tree = ast.parse("\n".join(new_lines))
+            ast.parse("\n".join(new_lines))
         except SyntaxError:
             return ALL
-        old_tree = ast.parse("\n".join(old_lines))
-        if ast.dump(strip_docstrings(old_tree)) == ast.dump(strip_docstrings(new_tree)):
-            return set()
         if fp.new and fp.old and fp.new != fp.old:
             return ALL  # rename
         out = set()
         for rem, add, pos in chunks(fp):
-            real_rem = [(n, t) for n, t in rem if not is_comment_or_blank(t)]
+            real_rem = [(n, t) for n, t in rem if not is_comment_or_blank(t) or in_string(idx, n)]
             real_add = [t for t in add if not is_comment_or_blank(t)]
+            if not real_add and add and (in_string(idx, pos) or in_string(idx, pos + 1)):
+                real_add = add
             if not real_rem and not real_add:
+                continue
+            r = self.inside_statement(path, idx, old_lines, rem, add, pos)
+            if r is not None:
+                out |= r
                 continue
             if real_rem:
                 seen = set()

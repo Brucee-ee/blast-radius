@@ -5,8 +5,9 @@ import pytest
 
 OPENS = {}
 CLASSES = {}
+import brhooks
+from brhooks import CUR, DEFINING, ATTR_READS, ATTR_DONE, _Rec
 
-CUR = [None]
 ROOT = os.getcwd()
 
 def _hook(event, args):
@@ -65,7 +66,7 @@ def run_with_ctx(nodeid, blob):
     if not _CHILD_READY[0]:
         _CHILD_READY[0] = True
         try:
-            _install(); _install_expr()
+            _install(); _install_expr(); _install_attrs()
         except Exception:
             pass
     if cov:
@@ -78,6 +79,7 @@ def run_with_ctx(nodeid, blob):
         CUR[0] = None
         if cov:
             cov.switch_context("")
+        _dump_attr(os.path.join(os.environ.get("COV_CLASSES_DIR", "/tmp"), "attrs.%d.jsonl" % os.getpid()))
         s = CLASSES.pop(nodeid, None)
         if s:
             with open(os.path.join(os.environ.get("COV_CLASSES_DIR", "/tmp"), "classes.%d.jsonl" % os.getpid()), "a") as f:
@@ -95,6 +97,110 @@ def _install_pool():
         fut.result = lambda timeout=None: pickle.loads(r(timeout))
         return fut
     cp.ProcessPoolExecutor.submit = submit
+
+
+# ---------------------------------------------------------------- class attribute reads
+# Every plain (non-callable, non-dunder) class attribute of sqlglot's Dialect, Parser,
+# Generator, Tokenizer and Expr hierarchies is wrapped in a recording descriptor, so we
+# learn which tests read which attribute through which class.  Reads with no test
+# running (imports, collection) are recorded under "IMPORT".
+ATTR_PAIRS = {}          # (owner_key, name) -> set(ctx)
+ATTR_MRO = {}            # owner_key -> [mro keys]
+_wrap_cls = brhooks.wrap_cls
+
+def _bases():
+    from sqlglot.dialects.dialect import Dialect
+    from sqlglot.parser import Parser
+    from sqlglot.generator import Generator
+    from sqlglot.tokens import _TokenizerBase
+    from sqlglot.expressions.core import Expr
+    return (Dialect, Parser, Generator, _TokenizerBase, Expr)
+
+def _wrap_tree(base):
+    stack = [base]
+    while stack:
+        c = stack.pop()
+        _wrap_cls(c)
+        stack.extend(c.__subclasses__())
+
+def _wrap_all():
+    for b in _bases():
+        _wrap_tree(b)
+
+def _key(c):
+    return c.__module__ + ":" + c.__qualname__
+
+def _flush_attr_reads():
+    for ctx, s in ATTR_READS.items():
+        for owner, name in s:
+            k = _key(owner)
+            if k not in ATTR_MRO:
+                ATTR_MRO[k] = [_key(x) for x in owner.__mro__ if x is not object]
+            ATTR_PAIRS.setdefault((k, name), set()).add(ctx)
+    ATTR_READS.clear()
+
+def _install_attrs():
+    from sqlglot import generator as g
+    from sqlglot.dialects import dialect as d
+    from sqlglot.expressions import core
+    from sqlglot import tokens
+
+    class _NoCache(dict):
+        def get(self, *a, **k):
+            return None
+        def __setitem__(self, k, v):
+            pass
+    g._DISPATCH_CACHE = _NoCache()   # make every generator build its dispatch (reads TRANSFORMS)
+
+    brhooks.install_early()
+    orig_new = d._Dialect.__new__
+    def new(mcls, *a, **k):
+        DEFINING[0] += 1
+        try:
+            klass = orig_new(mcls, *a, **k)
+        finally:
+            DEFINING[0] -= 1
+        for c in (klass, getattr(klass, "parser_class", None), getattr(klass, "generator_class", None),
+                  getattr(klass, "tokenizer_class", None), getattr(klass, "jsonpath_tokenizer_class", None)):
+            if isinstance(c, type):
+                for x in c.__mro__:
+                    _wrap_cls(x)
+        return klass
+    d._Dialect.__new__ = new
+
+    for base in (core.Expr, tokens._TokenizerBase):
+        orig = base.__dict__["__init_subclass__"].__func__
+        def mk(orig):
+            def sub(cls, **kw):
+                DEFINING[0] += 1
+                try:
+                    orig(cls, **kw)
+                finally:
+                    DEFINING[0] -= 1
+                _wrap_cls(cls)
+            return classmethod(sub)
+        base.__init_subclass__ = mk(orig)
+    _wrap_all()
+
+_WRITTEN = set()
+_MRO_WRITTEN = set()
+
+def _dump_attr(path):
+    _flush_attr_reads()
+    lines = []
+    for (k, n), ctxs in ATTR_PAIRS.items():
+        new = [c for c in ctxs if (k, n, c) not in _WRITTEN]
+        if new:
+            _WRITTEN.update((k, n, c) for c in new)
+            lines.append(json.dumps([k, n, sorted(new)]))
+    mro = {k: v for k, v in ATTR_MRO.items() if k not in _MRO_WRITTEN}
+    if mro:
+        _MRO_WRITTEN.update(mro)
+        lines.append(json.dumps(["__MRO__", mro]))
+    if lines:
+        with open(path, "a") as f:
+            f.write("\n".join(lines) + "\n")
+    ATTR_PAIRS.clear()
 
 def _install_expr():
     from sqlglot.expressions import core
@@ -118,6 +224,7 @@ def pytest_sessionstart(session):
     _install()
     _install_expr()
     _install_pool()
+    _install_attrs()
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_fixture_setup(fixturedef, request):
@@ -149,15 +256,21 @@ def pytest_fixture_setup(fixturedef, request):
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_protocol(item, nextitem):
     cov = coverage.Coverage.current()
+    try:
+        _wrap_all()
+    except Exception:
+        pass
     CUR[0] = item.nodeid
     if cov:
         cov.switch_context(item.nodeid)
     yield
+    _flush_attr_reads()
     CUR[0] = None
     if cov:
         cov.switch_context("")
 
 def pytest_sessionfinish(session):
+    _dump_attr(os.path.join(os.environ.get("COV_CLASSES_DIR", "/tmp"), "attrs.main.jsonl"))
     out = os.environ.get("OPENS_OUT")
     if out:
         json.dump({k: sorted(v) for k, v in OPENS.items()}, open(out, "w"))
