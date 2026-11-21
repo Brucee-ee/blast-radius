@@ -143,6 +143,28 @@ def queries_reached(files, src, chunks, qlines):
     return mask
 
 
+def front_free(files, src, chunks, front):
+    """True when every edit is inside a function that never ran while the TPC-DS queries were
+    parsed or optimized: the optimizer's output is then the pinned one."""
+    for fp in files:
+        path = fp.old
+        if fp.is_new or fp.is_deleted or not path or path == "sqlglot/executor/__init__.py" or fp.new != path:
+            return False
+        ranges = _func_ranges((src / path).read_text(encoding="utf-8"))
+        lines = set(front.get(path, ()))
+        for rem, add, pos in chunks(fp):
+            lo, hi = (rem[0][0], rem[-1][0]) if rem else (pos, pos + 1)
+            inner = [r for r in ranges if r[0] <= lo and hi <= r[2]]
+            if not inner:
+                return False
+            head, _, end = max(inner)
+            if any(no == head for no, _ in rem) and _def_names(t for _, t in rem) != _def_names(add):
+                return False
+            if lines.intersection(range(head, end + 1)):
+                return False
+    return True
+
+
 def _edits(files):
     edits = []
     for fp in files:
@@ -176,7 +198,7 @@ def _module(path):
     return mod[: -len(".__init__")] if mod.endswith(".__init__") else mod
 
 
-def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60, mods=None):
+def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60, mods=None, fast=False):
     """True only when the patch provably leaves the TPC-DS pipeline's outputs alone."""
     edits = _edits(files)
     if not edits:
@@ -214,9 +236,11 @@ def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60
             touched.append((target, orig))
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("\n".join(new_lines), encoding="utf-8")
-        exec_only = all(p.startswith("sqlglot/executor/") and p != "sqlglot/executor/__init__.py"
-                        for _, p in edits)
-        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0", BR_TP_EXEC="1" if exec_only else "")
+        # the executor's own modules (bar executor/__init__.py, which calls the optimizer) are
+        # never used while parsing or optimizing either
+        fast = fast or all(p.startswith("sqlglot/executor/") and p != "sqlglot/executor/__init__.py"
+                           for _, p in edits)
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0", BR_TP_EXEC="1" if fast else "")
         r = subprocess.run(
             [sys.executable, "-S", str(checker), str(SCRATCH), str(data_path)]
             + ([",".join(map(str, sorted(only)))] if only else []),
