@@ -64,13 +64,42 @@ def wrap_cls(cls):
             pass
 
 
-def _defining(fn):
+IMPORTING = [0]
+_COV = [None]
+
+
+def _cov():
+    c = _COV[0]
+    if c is None:
+        cm = sys.modules.get("coverage")
+        c = cm.Coverage.current() if cm is not None else None
+        _COV[0] = c          # stays None (and is retried) until coverage has started
+    return c
+
+
+def _ctx_label():
+    # Lines run while a module is being imported are labelled IMP:<test>, so the map can tell
+    # "the test ran this line" apart from "the test happened to trigger this module's import".
+    return CUR[0]
+
+
+def _importing(fn):
     def w(*a, **k):
         DEFINING[0] += 1
+        IMPORTING[0] += 1
+        switched = False
+        if IMPORTING[0] == 1 and CUR[0] is not None:
+            c = _cov()
+            if c is not None:
+                c.switch_context("IMP:" + CUR[0])
+                switched = True
         try:
             return fn(*a, **k)
         finally:
+            IMPORTING[0] -= 1
             DEFINING[0] -= 1
+            if switched:
+                c.switch_context(CUR[0] if CUR[0] is not None else "")
     w._br = True
     return w
 
@@ -93,5 +122,5 @@ def install_early():
 
     bc._br = True
     builtins.__build_class__ = bc
-    builtins.__import__ = _defining(builtins.__import__)
-    importlib.import_module = _defining(importlib.import_module)
+    builtins.__import__ = _importing(builtins.__import__)
+    importlib.import_module = _importing(importlib.import_module)

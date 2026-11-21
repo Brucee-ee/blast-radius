@@ -19,23 +19,26 @@ def expand(c):
             return range(len(ids))
         return [i for i, t in enumerate(ids) if t.startswith(k + '::')]
     return [num[c]] if c in num else []
-sets, setlist, files = {}, [], {}
+sets, setlist, files, files_imp = {}, [], {}, {}
+def sid(s):
+    k = frozenset(s)
+    if k not in sets:
+        sets[k] = len(setlist); setlist.append(sorted(k))
+    return sets[k]
 for f in cd.measured_files():
     rel = os.path.relpath(f, root)
     lines = collections.defaultdict(set)
+    imp = collections.defaultdict(set)
     for line, ctxs in cd.contexts_by_lineno(f).items():
         for c in ctxs:
             if c == '':
-                lines[line].add(-1)          # import time / collection time
+                lines[line].add(-1)          # import time / collection time, no test running
+            elif c.startswith('IMP:'):
+                imp[line].update(expand(c[4:]))   # run while a test triggered this module's import
             else:
                 lines[line].update(expand(c))
-    out_f = {}
-    for line, s in lines.items():
-        k = frozenset(s)
-        if k not in sets:
-            sets[k] = len(setlist); setlist.append(sorted(k))
-        out_f[str(line)] = sets[k]
-    files[rel] = out_f
+    files[rel] = {str(l): sid(s) for l, s in lines.items()}
+    files_imp[rel] = {str(l): sid(s) for l, s in imp.items()}
 classes = collections.defaultdict(list)
 for t, cl in json.load(open(os.path.join(work, 'classes.json'))).items():
     for i in expand(t):
@@ -89,7 +92,7 @@ for (n, k), s in acc.items():
 attr_fn = {n: sorted(v) for n, v in attr_fn.items()}
 attr_body = {n: sorted(v) for n, v in attr_body.items()}
 json.dump({'ids': ids, 'sets': setlist, 'files': files, 'classes': classes, 'opens': opens, 'refs': refs,
-           'attr': attr, 'attr_fn': attr_fn, 'attr_body': attr_body, 'mro': mro},
+           'files_imp': files_imp, 'attr': attr, 'attr_fn': attr_fn, 'attr_body': attr_body, 'mro': mro},
           open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'map.json'), 'w'), separators=(',', ':'))
 
 # ---- static index: import-time (module / class body) references to attribute names ----

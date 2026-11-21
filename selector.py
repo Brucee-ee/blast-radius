@@ -47,6 +47,7 @@ class Map:
         self.id_to_num = [num.get(i) for i in m["ids"]]
         self.sets = m["sets"]
         self.files = {f: {int(k): v for k, v in d.items()} for f, d in m["files"].items()}
+        self.files_imp = {f: {int(k): v for k, v in d.items()} for f, d in m.get("files_imp", {}).items()}
         self.classes = m["classes"]
         self.opens = m["opens"]
         self.refs = m["refs"]
@@ -78,16 +79,30 @@ class Map:
             r = self._set_cache[sid] = self.conv(self.sets[sid])
         return r
 
-    def lines(self, path, start, end):
-        d = self.files.get(path)
+    def lines(self, path, start, end, imp=False):
+        """Tests that ran lines start..end.  With imp, also tests during which the module was
+        imported (needed for import-time code: module level, class bodies, def lines)."""
         out = set()
-        if not d:
-            return out
-        for ln in range(start, end + 1):
-            sid = d.get(ln)
-            if sid is not None:
-                out |= self.set_tests(sid)
+        for d in ((self.files.get(path), self.files_imp.get(path)) if imp else (self.files.get(path),)):
+            if not d:
+                continue
+            for ln in range(start, end + 1):
+                sid = d.get(ln)
+                if sid is not None:
+                    out |= self.set_tests(sid)
         return out
+
+    def import_ran(self, path, start, end):
+        """Did any of these lines run while a module was being imported (or before tests ran)?"""
+        di = self.files_imp.get(path) or {}
+        d = self.files.get(path) or {}
+        for ln in range(start, end + 1):
+            if ln in di:
+                return True
+            sid = d.get(ln)
+            if sid is not None and IMPORT_CTX in self.sets[sid]:
+                return True
+        return False
 
     def has_import_ctx(self, path, start, end):
         d = self.files.get(path)
@@ -100,10 +115,10 @@ class Map:
         return False
 
     def file_union(self, path):
-        d = self.files.get(path) or {}
         out = set()
-        for sid in set(d.values()):
-            out |= self.set_tests(sid)
+        for d in (self.files.get(path) or {}, self.files_imp.get(path) or {}):
+            for sid in set(d.values()):
+                out |= self.set_tests(sid)
         return out
 
     def class_tests(self, key):
@@ -355,6 +370,11 @@ def in_string(idx, line):
     return False
 
 
+def body_start(fs):
+    """First line of a function's body: its def/decorator lines run at import, not when called."""
+    return fs.node.body[0].lineno if fs.node.body else fs.start
+
+
 def module_of(path):
     p = path[:-3] if path.endswith(".py") else path
     p = p.replace("/", ".")
@@ -418,7 +438,7 @@ class Analyzer:
             if idx:
                 for s in idx.stmts:
                     if isinstance(s.node, ast.ClassDef) and s.cls == st.cls[:-1] and s.node.name == st.cls[-1]:
-                        out |= m.lines(path, s.start, s.end)
+                        out |= m.lines(path, s.start, s.end, imp=True)
                         break
             if not out:
                 out |= m.file_union(path)
@@ -548,9 +568,52 @@ class Analyzer:
         return names
 
 
+    def inside_header(self, path, idx, old_lines, rem, add, pos):
+        """A chunk confined to the header of an if/while/for/with inside a function (its condition,
+        iterable or context expressions): the tests that reached that header."""
+        if rem:
+            first, last = rem[0][0], rem[-1][0]
+        else:
+            first, last = pos + 1, pos
+        s = None
+        for c in idx.stmts:
+            if c.start > first:
+                break
+            if c.compound and c.func is not None and isinstance(c.node, (ast.If, ast.While, ast.For, ast.AsyncFor, ast.With, ast.AsyncWith)) \
+                    and c.start <= first and c.node.body[0].lineno > max(last, first):
+                if s is None or c.start >= s.start:
+                    s = c
+        if s is None:
+            return None
+        hend = s.node.body[0].lineno - 1
+        if rem and last > hend or not rem and pos >= hend:
+            return None
+        # the patched header must still parse as the same kind of statement around the old body
+        if rem:
+            new = old_lines[s.start - 1:first - 1] + add + old_lines[last:s.end]
+        else:
+            new = old_lines[s.start - 1:pos] + add + old_lines[pos:s.end]
+        import textwrap
+        try:
+            tree = ast.parse(textwrap.dedent("\n".join(new)))
+        except SyntaxError:
+            return None
+        if len(tree.body) != 1 or type(tree.body[0]) is not type(s.node):
+            return None
+        nb, ob = tree.body[0], s.node
+        if ast.dump(ast.Module(nb.body, [])) != ast.dump(ast.Module(ob.body, [])) or \
+                ast.dump(ast.Module(getattr(nb, "orelse", []), [])) != ast.dump(ast.Module(getattr(ob, "orelse", []), [])):
+            return None
+        if self.m.import_ran(path, s.start, hend):
+            return ALL
+        return self.m.lines(path, s.start, hend)
+
     def inside_statement(self, path, idx, old_lines, rem, add, pos):
         """A chunk that only rewrites the inside of one simple statement: the tests that ran it
         (or, for a class attribute, that read it).  None when the chunk is anything else."""
+        hdr = self.inside_header(path, idx, old_lines, rem, add, pos)
+        if hdr is not None:
+            return hdr
         if rem:
             first, last = rem[0][0], rem[-1][0]
             s = idx.innermost(first)
@@ -596,7 +659,9 @@ class Analyzer:
         node = s.node
         # function definition header (signature, decorators, def line) or a line of a def not in a child
         if isinstance(node, FUNCS):
-            return m.lines(path, s.start, s.end)
+            if m.import_ran(path, body_start(s), s.end):
+                return ALL
+            return m.lines(path, body_start(s), s.end)
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
             return set()          # a docstring / bare string: no runtime effect (doctests are not in the suite)
         if isinstance(node, ast.ClassDef):
@@ -606,23 +671,22 @@ class Analyzer:
             own.cls = s.cls + (node.name,)  # a change to the class header is a change to the class itself
             return self.import_impact(path, own, depth)
         if s.func is not None:
-            res = m.lines(path, s.start, s.end)
-            if m.has_import_ctx(path, s.start, s.end):
-                # also ran outside any test (collection, a thread, a helper process): widen to the function
-                res |= m.lines(path, s.func.start, s.func.end)
-            return res
+            if m.import_ran(path, s.start, s.end):
+                return ALL     # runs at import time: what it computes outlives any one test
+            return m.lines(path, s.start, s.end)
         # import-time statement (module or class body)
         lam = None
         for n in ast.walk(node):
             if isinstance(n, ast.Lambda) and n.lineno <= line <= n.end_lineno:
                 lam = n
                 break
-        if lam is not None and not (s.cls and s.func is None):
-            return m.lines(path, lam.lineno, lam.end_lineno) | (m.lines(path, line, line))
         if lam is not None:
+            b = lam.body
+            if b.lineno > lam.lineno and m.import_ran(path, b.lineno, b.end_lineno):
+                return ALL
             return m.lines(path, lam.lineno, lam.end_lineno) | m.lines(path, line, line)
         if s.compound:
-            return m.lines(path, s.start, s.end) | self.import_impact(path, s, depth)
+            return m.lines(path, s.start, s.end, imp=True) | self.import_impact(path, s, depth)
         names = self.class_stmt_attr(path, s)
         if names and not name_scan:
             r = self.attr_change(path, s.cls, names, set(range(s.start, s.end + 1)))
@@ -699,7 +763,9 @@ class Analyzer:
                 if m_indent > def_indent:
                     fn = s if fn is None or (s.end - s.start) <= (fn.end - fn.start) else fn
         if fn is not None:
-            return m.lines(path, fn.start, fn.end)
+            if m.import_ran(path, body_start(fn), fn.end):
+                return ALL
+            return m.lines(path, body_start(fn), fn.end)
         # class body or module level
         cls = None
         for s in idx.stmts:
@@ -719,7 +785,7 @@ class Analyzer:
             names = tuple(s.node.name for s in chain)
             key = mod + ":" + ".".join(names)
             out |= m.class_tests(key)
-            out |= m.lines(path, cls.start, cls.end)
+            out |= m.lines(path, cls.start, cls.end, imp=True)
             if not out:
                 out |= m.file_union(path)
             # new names defined in the class may be read from base classes via self.X
