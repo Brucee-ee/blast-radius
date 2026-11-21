@@ -1296,7 +1296,9 @@ def tpcds_unchanged(text):
             with open(data, "rb") as f:
                 d = pickle.load(f)
             _tp["rt"], _tp["q"], _tp["n"] = d["rt"], d["qlines"], len(d["queries"])
-        files = parse_patch(text)
+        files = tpgate.relevant(parse_patch(text), apply_hunks, APP / "data" / "tpc-ds.sql")
+        if not files:
+            return True
         if tpgate.touches(files, chunks, _tp["rt"]):
             return False
         mask = tpgate.queries_reached(files, SRC, chunks, _tp["q"])
