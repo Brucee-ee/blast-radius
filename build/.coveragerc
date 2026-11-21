@@ -1,0 +1,5 @@
+[run]
+branch = False
+source = sqlglot
+data_file = /home/claude/work/build/cov.db
+[report]
