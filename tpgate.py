@@ -214,7 +214,9 @@ def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60
             touched.append((target, orig))
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("\n".join(new_lines), encoding="utf-8")
-        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0")
+        exec_only = all(p.startswith("sqlglot/executor/") and p != "sqlglot/executor/__init__.py"
+                        for _, p in edits)
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0", BR_TP_EXEC="1" if exec_only else "")
         r = subprocess.run(
             [sys.executable, "-S", str(checker), str(SCRATCH), str(data_path)]
             + ([",".join(map(str, sorted(only)))] if only else []),
