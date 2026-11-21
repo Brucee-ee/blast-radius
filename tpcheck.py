@@ -20,6 +20,8 @@ import pickle
 import sys
 
 MAX_FULL = 64  # queries rerun on the full tables before giving up
+CPU_LIMIT = 12  # seconds; a check that needs more (say, a patch that slows the executor down a lot)
+                # is killed by the kernel and the test is kept
 
 
 def _h(*parts):
@@ -31,6 +33,9 @@ def main():
     arg = sys.argv[3] if len(sys.argv) > 3 else ""
     dump = arg == "dump"
     only = None if dump or not arg else {int(x) for x in arg.split(",")}
+    if not dump:
+        import resource
+        resource.setrlimit(resource.RLIMIT_CPU, (CPU_LIMIT, CPU_LIMIT + 1))
     sys.path.insert(0, root)
     with open(data_path, "rb") as f:
         data = pickle.load(f)
