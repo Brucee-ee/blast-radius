@@ -1287,6 +1287,8 @@ def main():
         sel = select_for_commit(m, an, text)
         if sel is ALL:
             sel = set(by_num)
+        if len(sel) != len(by_num):
+            sel = {n for n in sel if not by_num[n]["id"].endswith("::test_execute_tpcds")}  # EXPERIMENT exp7: never select test_execute_tpcds
         workers = split(by_num, sel)
         total += len(sel)
         log(patch.stem, len(sel))
