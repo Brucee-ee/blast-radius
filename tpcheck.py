@@ -64,8 +64,8 @@ def main():
 
     current = [None]
     if os.environ.get("BR_TP_EXEC") == "1":
-        # the patch only touches the executor's own modules (not executor/__init__.py, which
-        # calls the optimizer): the optimizer's output is the pinned one, stored at build time
+        # every edit is in a function the queries' parsing and optimization never ran: the
+        # optimizer's output is the pinned one, stored at build time
         def stored_optimize(*a, **k):
             return pickle.loads(data["opt"][current[0]])
 
