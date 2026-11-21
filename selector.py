@@ -1276,17 +1276,54 @@ def split(tests_by_num, selected):
     return best[1]
 
 
+TPCDS_ID = "tests/test_executor.py::TestExecutor::test_execute_tpcds"
+_tp = {}
+TPCDS_BUDGET = 75.0  # wall seconds of checks per run; past it the test is simply kept
+
+
+def tpcds_unchanged(text):
+    """True when rerunning the TPC-DS pipeline on the patched sqlglot (tpcheck.py) shows no
+    difference from the pinned one, so test_execute_tpcds cannot change outcome."""
+    import pickle
+    import tpgate
+    import time
+    data = APP / "data" / "tpc.pkl"
+    if not data.exists() or _tp.get("spent", 0.0) > TPCDS_BUDGET:
+        return False
+    t0 = time.monotonic()
+    try:
+        if "rt" not in _tp:
+            with open(data, "rb") as f:
+                d = pickle.load(f)
+            _tp["rt"], _tp["q"], _tp["n"] = d["rt"], d["qlines"], len(d["queries"])
+        files = parse_patch(text)
+        if tpgate.touches(files, chunks, _tp["rt"]):
+            return False
+        mask = tpgate.queries_reached(files, SRC, chunks, _tp["q"])
+        only = None if mask is None else [i for i in range(_tp["n"]) if mask >> i & 1]
+        if only == []:
+            return tpgate.applies(files, SRC, apply_hunks)
+        return tpgate.unchanged(files, SRC, apply_hunks, data, APP / "tpcheck.py", only)
+    except Exception:  # noqa: BLE001
+        return False
+    finally:
+        _tp["spent"] = _tp.get("spent", 0.0) + time.monotonic() - t0
+
+
 def main():
     tests = json.loads((DATA / "tests.json").read_text())["tests"]
     by_num = {t["number"]: t for t in tests}
     m = Map(tests)
     an = Analyzer(m)
+    tpcds = next((t["number"] for t in tests if t["id"] == TPCDS_ID), None)
     total = 0
     for patch in sorted((DATA / "commits").glob("*.patch")):
         text = patch.read_text(encoding="utf-8", errors="replace")
         sel = select_for_commit(m, an, text)
         if sel is ALL:
             sel = set(by_num)
+        elif tpcds in sel and tpcds_unchanged(text):
+            sel = sel - {tpcds}
         workers = split(by_num, sel)
         total += len(sel)
         log(patch.stem, len(sel))
