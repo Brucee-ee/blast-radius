@@ -176,6 +176,58 @@ def _module(path):
     return mod[: -len(".__init__")] if mod.endswith(".__init__") else mod
 
 
+_srv = {}
+
+
+def _server(checker, data_path):
+    """The check server (tpcheck.py --serve), started once on the pristine scratch copy: it has
+    the sqlglot package imported, so a check of a patch that leaves those modules alone skips
+    the interpreter start and most of the imports."""
+    if "p" not in _srv:
+        _srv["p"] = None
+        try:
+            env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0", BR_TP_EXEC="")
+            p = subprocess.Popen([sys.executable, "-S", str(checker), "--serve", str(SCRATCH), str(data_path)],
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                 env=env, text=True)
+            line = p.stdout.readline()
+            if line.startswith("READY "):
+                _srv["p"] = p
+                import atexit
+                atexit.register(_stop, p)
+                _srv["mods"] = set(line[6:].split(","))
+                _srv["mods"] = {x.strip() for x in _srv["mods"]}
+            else:
+                p.kill()
+        except Exception:  # noqa: BLE001
+            _srv["p"] = None
+    return _srv["p"]
+
+
+def _stop(p):
+    try:
+        p.stdin.close()
+        p.wait(timeout=10)
+    except Exception:  # noqa: BLE001
+        try:
+            p.kill()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _ask(p, exec_only, only):
+    try:
+        p.stdin.write(("1" if exec_only else "0") + (" " + ",".join(map(str, sorted(only))) if only else "") + "\n")
+        p.stdin.flush()
+        line = p.stdout.readline()
+        if line.startswith("RC "):
+            return int(line[3:])
+    except Exception:  # noqa: BLE001
+        pass
+    _srv["p"] = None   # broken: back to one process per check
+    return None
+
+
 def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60, mods=None):
     """True only when the patch provably leaves the TPC-DS pipeline's outputs alone."""
     edits = _edits(files)
@@ -192,6 +244,7 @@ def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60
         base = _ensure_base(src)
     except OSError:
         return False
+    server = _server(checker, data_path)
     touched = []
     ok = False
     try:
@@ -216,13 +269,17 @@ def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60
             target.write_text("\n".join(new_lines), encoding="utf-8")
         exec_only = all(p.startswith("sqlglot/executor/") and p != "sqlglot/executor/__init__.py"
                         for _, p in edits)
-        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0", BR_TP_EXEC="1" if exec_only else "")
-        r = subprocess.run(
-            [sys.executable, "-S", str(checker), str(SCRATCH), str(data_path)]
-            + ([",".join(map(str, sorted(only)))] if only else []),
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, timeout=timeout,
-        )
-        ok = r.returncode == 0
+        rc = None
+        if server is not None and not any(_module(path) in _srv["mods"] for _, path in edits):
+            rc = _ask(server, exec_only, only)
+        if rc is None:
+            env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0", BR_TP_EXEC="1" if exec_only else "")
+            rc = subprocess.run(
+                [sys.executable, "-S", str(checker), str(SCRATCH), str(data_path)]
+                + ([",".join(map(str, sorted(only)))] if only else []),
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, timeout=timeout,
+            ).returncode
+        ok = rc == 0
     except Exception:  # noqa: BLE001
         ok = False
     finally:
