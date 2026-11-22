@@ -862,6 +862,46 @@ class Analyzer:
                     out |= m.set_tests(sid)
         return out
 
+    def value_change(self, path, s, names, new_names, ov, nv):
+        """Tests that can see a value-only edit of a dict class attribute (see value_sites)."""
+        m = self.m
+        if names != new_names or len(names) != 1:
+            return None
+        changed = dict_value_change(ov, nv)
+        if not changed:
+            return None
+        attr = names[0]
+        cname = module_of(path) + ":" + ".".join(s.cls)
+        owners = m.subs.get(cname)
+        if not owners:
+            return None
+        sites = value_sites(attr, changed)
+        if sites is None:
+            return None
+        reach = set()
+        for f, lines in sites.items():
+            for ln in lines:
+                reach |= m.lines(f, ln, ln)
+        users = set()                    # tests that read the attribute on these classes
+        reads = m.attr.get(attr, {})
+        for o in owners:
+            sid = reads.get(o)
+            if sid is not None:
+                users |= m.set_tests(sid)
+        du = dialect_users(m)
+        for o in owners:                 # and those that used the dialects the classes belong to
+            mod = o.split(":")[0]
+            if mod.startswith("sqlglot.dialects."):
+                users |= du.get(mod, set())
+        # tests whose own code names the attribute read it directly
+        word = re.compile(r"\b%s\b" % re.escape(attr))
+        for f, nums in m.by_file.items():
+            lines = src_lines(f)
+            if lines is not None and word.search("\n".join(lines)):
+                reach |= set(nums)
+        log("value-only edit", attr, sorted(changed), len(users), "users", len(reach & users), "selected")
+        return reach & users
+
     def class_stmt_attr(self, path, s, extra_new=None):
         """If statement `s` is a plain assignment in a class body, the attribute names it sets."""
         node = s.node
@@ -1024,6 +1064,9 @@ class Analyzer:
                 if not lam:
                     ov, nv = s.node.value, tree.body[0].value
                     same = type(ov) is type(nv) and (not isinstance(ov, ast.Constant) or type(ov.value) is type(nv.value))
+                    r = self.value_change(path, s, names, new_names, ov, nv)
+                    if r is not None:
+                        return r
                     r = self.attr_change(path, s.cls, sorted(set(names) | set(new_names)), set(range(s.start, s.end + 1)),
                                          same_shape=same)
                     if r is not None:
@@ -1586,6 +1629,204 @@ def import_failure(m, path):
     return out
 
 
+# ------------------------------------------------------------------- value-only dict edits
+# A class attribute holding a dict whose edit changes values but no keys reaches tests only
+# through the places that read values out of it.  value_sites() finds every place in sqlglot that
+# uses the attribute and sorts it: key-only uses (membership, truthiness, len, keys()), reads of
+# other constant keys, reads of values (the lines that matter), and the hand-over into a
+# TokenizerCore field, whose own uses are then sorted the same way.  Any other use (a copy into
+# another class body, an alias passed on, a getattr by name, ...) and the answer is None.
+
+_vs = {"trees": None}
+
+
+def _sqlglot_trees(word=None):
+    """(path, tree) of the pinned sqlglot sources (with parent links), only those whose text
+    contains `word` when given."""
+    if _vs["trees"] is None:
+        texts = []
+        for p in sorted((SRC / "sqlglot").rglob("*.py")):
+            try:
+                texts.append([p.relative_to(SRC).as_posix(), p.read_text(encoding="utf-8"), None])
+            except OSError:
+                continue
+        _vs["trees"] = texts
+    out = []
+    for item in _vs["trees"]:
+        rel, text, tree = item
+        if word is not None and word not in text:
+            continue
+        if tree is None:
+            try:
+                tree = ast.parse(text)
+            except SyntaxError:
+                tree = ast.Module(body=[], type_ignores=[])
+            for n in ast.walk(tree):
+                for c in ast.iter_child_nodes(n):
+                    c._p = n
+            item[2] = tree
+        out.append((rel, tree))
+    return out
+
+
+def _truth_context(n):
+    """Is the value of expression `n` only tested for truth?"""
+    p = getattr(n, "_p", None)
+    if isinstance(p, (ast.If, ast.While, ast.IfExp, ast.Assert)) and p.test is n:
+        return True
+    if isinstance(p, ast.comprehension) and n in p.ifs:
+        return True
+    if isinstance(p, ast.UnaryOp) and isinstance(p.op, ast.Not):
+        return True
+    if isinstance(p, ast.Call) and isinstance(p.func, ast.Name) and p.func.id == "bool" and p.args == [n]:
+        return True
+    if isinstance(p, ast.BoolOp):
+        return _truth_context(p)
+    return False
+
+
+def _classify(n, changed, sites, depth):
+    """Sort one use (node `n` evaluating to the dict); adds value-reading lines to `sites`.
+    False when the use cannot be told."""
+    p = getattr(n, "_p", None)
+    if p is None:
+        return False
+    if isinstance(p, ast.Compare) and n in p.comparators and len(p.ops) == 1 and isinstance(p.ops[0], (ast.In, ast.NotIn)):
+        return True                                  # key membership
+    if _truth_context(n):
+        return True
+    if isinstance(p, ast.Call) and isinstance(p.func, ast.Name) and p.func.id in ("len", "bool") and p.args == [n]:
+        return True
+    if isinstance(p, ast.Attribute) and p.value is n:
+        call = getattr(p, "_p", None)
+        if not (isinstance(call, ast.Call) and call.func is p):
+            return False
+        if p.attr == "keys":
+            return True
+        if p.attr == "get" and call.args:
+            k = call.args[0]
+            if isinstance(k, ast.Constant) and k.value not in changed:
+                return True
+            sites.add(call.lineno)
+            return True
+        if p.attr in ("items", "values"):
+            sites.add(call.lineno)
+            return True
+        return False
+    if isinstance(p, ast.Subscript) and p.value is n and isinstance(p.ctx, ast.Load):
+        if isinstance(p.slice, ast.Constant) and p.slice.value not in changed:
+            return True
+        sites.add(p.lineno)
+        return True
+    if isinstance(p, ast.comprehension) and p.iter is n and isinstance(p.target, ast.Name):
+        return True                                  # iterates keys
+    if isinstance(p, ast.For) and p.iter is n and isinstance(p.target, ast.Name):
+        return True
+    return False
+
+
+def _in_slots(n):
+    p = getattr(n, "_p", None)
+    while isinstance(p, (ast.List, ast.Tuple, ast.Set)):
+        p = getattr(p, "_p", None)
+    return isinstance(p, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__slots__" for t in p.targets)
+
+
+def _function_of(n):
+    while n is not None and not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        n = getattr(n, "_p", None)
+    return n
+
+
+def value_sites(attr, changed, depth=0, field=False):
+    """{file: lines} where values of dict attribute `attr` may be read, or None if some use of
+    it cannot be sorted.  `changed`: the keys whose values the edit changes."""
+    if depth > 2:
+        return None
+    if field and not _plain_field(attr):
+        return None
+    out = {}
+    for rel, tree in _sqlglot_trees(attr):
+        lines = set()
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Constant) and n.value == attr and not _in_slots(n):
+                return None                          # looked up by name
+            if isinstance(n, ast.Name) and n.id == attr and not field:
+                fn = _function_of(n)
+                if fn is None and isinstance(n.ctx, ast.Store):
+                    continue                         # the class-body definitions themselves
+                return None
+            if not (isinstance(n, ast.Attribute) and n.attr == attr):
+                continue
+            if not isinstance(n.ctx, ast.Load):
+                if field and isinstance(n.ctx, ast.Store):
+                    continue                         # self.<field> = <param> in TokenizerCore.__init__
+                return None
+            fn = _function_of(n)
+            if fn is None:
+                return None                          # read by import-time code
+            p = n._p
+            if isinstance(p, ast.keyword) and isinstance(p._p, ast.Call) and \
+                    isinstance(p._p.func, ast.Name) and p._p.func.id == "TokenizerCore" and not field:
+                sub = value_sites(p.arg, changed, depth + 1, field=True)
+                if sub is None:
+                    return None
+                for k, v in sub.items():
+                    out.setdefault(k, set()).update(v)
+                continue
+            if isinstance(p, ast.Assign) and len(p.targets) == 1 and isinstance(p.targets[0], ast.Name) and p.value is n:
+                alias = p.targets[0].id      # a local alias: sort its uses in the same function
+                for u in ast.walk(fn):
+                    if isinstance(u, ast.Name) and u.id == alias and u is not p.targets[0]:
+                        if not isinstance(u.ctx, ast.Load) or not _classify(u, changed, lines, depth):
+                            return None
+                continue
+            if not _classify(n, changed, lines, depth):
+                return None
+        if lines:
+            out.setdefault(rel, set()).update(lines)
+    return out
+
+
+def _plain_field(name):
+    """Does TokenizerCore.__init__ only store its parameter `name` as `self.<name>`?"""
+    for rel, tree in _sqlglot_trees("class TokenizerCore"):
+        for c in ast.walk(tree):
+            if isinstance(c, ast.ClassDef) and c.name == "TokenizerCore":
+                inits = [f for f in c.body if isinstance(f, ast.FunctionDef) and f.name == "__init__"]
+                if len(inits) != 1:
+                    return False
+                init = inits[0]
+                if name not in [a.arg for a in init.args.args + init.args.kwonlyargs]:
+                    return False
+                for u in ast.walk(init):
+                    if isinstance(u, ast.Name) and u.id == name:
+                        p = getattr(u, "_p", None)
+                        if not (isinstance(p, ast.Assign) and p.value is u and len(p.targets) == 1
+                                and isinstance(p.targets[0], ast.Attribute) and p.targets[0].attr == name
+                                and isinstance(p.targets[0].value, ast.Name) and p.targets[0].value.id == "self"):
+                            return False
+                return True
+    return False
+
+
+def dict_value_change(old, new):
+    """For two versions of `X = {...}` with the same constant keys, the keys whose values differ;
+    None otherwise."""
+    if not (isinstance(old, ast.Dict) and isinstance(new, ast.Dict)):
+        return None
+    if None in old.keys or None in new.keys:
+        return None                                  # ** unpacking
+    if not all(isinstance(k, ast.Constant) for k in old.keys + new.keys):
+        return None
+    ok = [k.value for k in old.keys]
+    nk = [k.value for k in new.keys]
+    if ok != nk or len(set(ok)) != len(ok):
+        return None
+    changed = {k for k, a, b in zip(ok, old.values, new.values) if ast.dump(a) != ast.dump(b)}
+    return changed or None
+
+
 def _qual(tree, fn):
     """(Class, ..., name) path of function node `fn` inside `tree`."""
     def walk(body, prefix):
@@ -1662,15 +1903,9 @@ def test_file_impact(m, fp):
         if k not in fa or k not in fb or ast.dump(strip_docstrings(ast.Module([fa[k]], []))) != ast.dump(strip_docstrings(ast.Module([fb[k]], []))):
             changed.add(k)
     out = set()
-    helpers = {k[-1] for k in changed if not k[-1].startswith("test")}
-    if helpers:
-        callers = helper_callers(m, path, in_file, helpers)
-        if callers is None:
-            return in_file
-        out |= callers
     for k in changed:
         if not k[-1].startswith("test"):
-            continue
+            return in_file
         pre = path + "::" + "::".join(k)
         hit = [t["number"] for t in m.tests if t["id"] == pre]
         if not hit:
@@ -1678,79 +1913,6 @@ def test_file_impact(m, fp):
         out |= set(hit)
         # the same method inherited by test classes in other files
         out |= {n for n in in_file if m.tests[n]["id"].endswith("::" + k[-1])}
-    return out
-
-
-_LIFECYCLE = ("setUp", "tearDown", "setUpClass", "tearDownClass", "setUpModule", "tearDownModule",
-              "load_tests", "addClassCleanup", "addCleanup", "run", "subTest", "__init__", "__init_subclass__")
-
-
-def helper_callers(m, path, in_file, names):
-    """Tests that can call one of the helper functions or methods `names` of test file `path`
-    (only their bodies changed): test functions of `path` and of the test files importing it that
-    mention one of the names, directly or through other helpers mentioning them.  None when a
-    name is reached from code that runs outside a test function (module or class level, setUp and
-    the like), where the caller cannot be told."""
-    files = {path} | {m.tests[n]["file"] for n in in_file}
-    funcs = []          # (file, class path, name, referenced names)
-    for f in sorted(files):
-        lines = src_lines(f)
-        if lines is None:
-            return None
-        try:
-            tree = ast.parse("\n".join(lines))
-        except SyntaxError:
-            return None
-
-        def refs(node):
-            r = set()
-            for x in ast.walk(node):
-                if isinstance(x, ast.Name):
-                    r.add(x.id)
-                elif isinstance(x, ast.Attribute):
-                    r.add(x.attr)
-                elif isinstance(x, ast.Constant) and isinstance(x.value, str) and x.value.isidentifier():
-                    r.add(x.value)          # getattr(self, "name") and the like
-            return r
-
-        def walk(body, prefix, f=f):
-            for n in body:
-                if isinstance(n, ast.ClassDef):
-                    funcs.append((f, prefix, None, {r for b in n.bases + n.decorator_list for r in refs(b)}))
-                    walk(n.body, prefix + [n.name])
-                elif isinstance(n, FUNCS):
-                    funcs.append((f, prefix, n.name, refs(n)))
-                else:
-                    funcs.append((f, prefix, None, refs(n)))       # runs at import or class creation
-        walk(tree.body, [])
-    for name in names:
-        # called implicitly (unittest hooks, dunders, fixtures by parameter name, ...) or by no
-        # code we can see: its callers cannot be told
-        if name in _LIFECYCLE or name.startswith(("setUp", "tearDown", "asyncSetUp", "asyncTearDown", "__")) \
-                or not any(name in r for f, prefix, nm, r in funcs):
-            return None
-    reach = set(names)
-    hit = []
-    changed = True
-    while changed:
-        changed = False
-        for f, prefix, name, r in funcs:
-            if not (r & reach):
-                continue
-            if name is None or name in _LIFECYCLE:
-                return None
-            if name.startswith("test"):
-                hit.append((f, prefix, name))
-            elif name not in reach:
-                reach.add(name)
-                changed = True
-    out = set()
-    for f, prefix, name in hit:
-        tid = "::".join([f] + prefix + [name])
-        n = m.num.get(tid)
-        if n is not None:
-            out.add(n)
-        out |= {x for x in in_file if m.tests[x]["id"].endswith("::" + name)}   # inherited elsewhere
     return out
 
 
@@ -1803,7 +1965,7 @@ def select_for_file(m, an, fp, path, old):
             return test_file_impact(m, fp)
         if base in ("__init__.py", "conftest.py") or fp.is_new or fp.is_deleted or fp.old != fp.new:
             return ALL
-        return test_file_impact(m, fp)      # shared test code such as tests/helpers.py
+        return test_importers(m, path)      # shared test code such as tests/helpers.py
     if path.startswith("sqlglotc/"):
         return set(m.by_file.get("tests/test_sqlglotc.py", ())) | (ALL if not path.endswith(tuple(DOC_EXT)) else set())
     if path.startswith("sqlglot/"):
