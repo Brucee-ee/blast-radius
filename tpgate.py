@@ -279,6 +279,44 @@ def import_check(files, src, apply_hunks, module, checker, data_path, timeout=60
                 pass
 
 
+def import_all_check(files, src, apply_hunks, importable, timeout=120):
+    """Modules of `importable` that fail to import with the patch applied to the scratch copy."""
+    _ensure_base(src)
+    code = ("import sys, importlib\nsys.path.insert(0, %r)\n"
+            "try:\n    import sqlglot\nexcept Exception:\n    print('FAIL sqlglot')\n    sys.exit(0)\n"
+            "for name in sys.stdin.read().split():\n"
+            "    try:\n        importlib.import_module(name)\n"
+            "    except Exception:\n        print('FAIL ' + name)\n") % str(SCRATCH)
+    touched = []
+    try:
+        for fp in files:
+            path = fp.new if not fp.is_deleted else fp.old
+            target = SCRATCH / path
+            orig = src / path
+            if fp.is_deleted or not orig.exists():
+                return ()
+            new_lines = apply_hunks(orig.read_text(encoding="utf-8").split("\n"), fp)
+            if new_lines is None:
+                return ()
+            touched.append((target, orig))
+            target.write_text("\n".join(new_lines), encoding="utf-8")
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0")
+        try:
+            r = subprocess.run([sys.executable, "-S", "-c", code], input="\n".join(importable), capture_output=True,
+                               text=True, env=env, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return ()
+        return {x[5:].strip() for x in r.stdout.split("\n") if x.startswith("FAIL ")}
+    finally:
+        for target, orig in touched:
+            try:
+                shutil.copyfile(orig, target)
+                st = orig.stat()
+                os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
+            except OSError:
+                pass
+
+
 def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60, mods=None):
     """True only when the patch provably leaves the TPC-DS pipeline's outputs alone."""
     edits = _edits(files)
