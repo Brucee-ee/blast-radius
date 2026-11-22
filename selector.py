@@ -339,8 +339,24 @@ def strip_types(tree):
         elif isinstance(node, ast.If) and isinstance(node.test, (ast.Name, ast.Attribute)) \
                 and getattr(node.test, "id", getattr(node.test, "attr", None)) == "TYPE_CHECKING":
             node.body = [ast.Pass()]
+        elif isinstance(node, ast.ClassDef) and _typeddict_untouched() and any(
+                getattr(b, "id", getattr(b, "attr", None)) == "TypedDict" for b in node.bases):
+            # a TypedDict's fields and totality matter only to introspection, which nothing uses
+            node.keywords = [k for k in node.keywords if k.arg != "total"]
+            for x in node.body:
+                if isinstance(x, ast.AnnAssign) and x.value is None:
+                    x.annotation = ast.Constant(value=None)
     walk(tree, False)
     return tree
+
+
+def _typeddict_untouched():
+    """No pinned source or test introspects annotations or TypedDict keys."""
+    if "td" not in _corpus:
+        _corpus["td"] = all(_name_count(n) == 0 for n in (
+            "__required_keys__", "__optional_keys__", "__total__", "__readonly_keys__",
+            "__mutable_keys__", "get_type_hints", "__annotations__", "__annotate__", "get_annotations"))
+    return _corpus["td"]
 
 
 def types_only_change(old_text, new_text):
