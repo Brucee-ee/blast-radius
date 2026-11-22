@@ -1745,6 +1745,10 @@ def value_sites(attr, changed, depth=0, field=False):
         return None
     if field and not _plain_field(attr):
         return None
+    if not field:
+        _sqlglot_trees("\0")                       # (loads the texts)
+        if sum(item[1].count(attr) for item in _vs["trees"]) > 40:
+            return None                              # used all over (arg_types and the like): not worth it
     out = {}
     for rel, tree in _sqlglot_trees(attr):
         lines = set()
