@@ -354,7 +354,64 @@ def types_only_change(old_text, new_text):
     if not (has_future_annotations(a) and has_future_annotations(b)):
         return False
     _drop_added_stdlib_imports(a, b)
+    _drop_added_unused_members(a, b, new_text)
     return _canon(a) == _canon(b)
+
+
+_corpus = {}
+
+
+def _name_count(name):
+    """Occurrences of `name` as a word in the pinned sqlglot and tests sources."""
+    if "text" not in _corpus:
+        parts = []
+        for p in sorted(SRC.rglob("*.py")):
+            try:
+                parts.append(p.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                pass
+        _corpus["text"] = "\n".join(parts)
+    return len(re.findall(r"\b%s\b" % re.escape(name), _corpus["text"]))
+
+
+def _drop_added_unused_members(old, new, new_text):
+    """Drop from the classes of `new` the methods and plain class attributes that `old` lacks when
+    their name is used nowhere else (not in the pinned sources, not elsewhere in the new text) and
+    is not one the generator looks up by suffix (`*_sql`), a dunder or a sunder hook (enum's
+    `_missing_` and the like): nothing can reach them."""
+    def classes(tree):
+        out = {}
+
+        def walk(body, prefix):
+            for n in body:
+                if isinstance(n, ast.ClassDef):
+                    out[prefix + n.name] = n
+                    walk(n.body, prefix + n.name + ".")
+        walk(tree.body, "")
+        return out
+
+    def member(n):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and not n.decorator_list:
+            return n.name
+        if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            return n.targets[0].id
+        return None
+
+    oc = classes(old)
+    for q, c in classes(new).items():
+        o = oc.get(q)
+        if o is None:
+            continue
+        have = {ast.dump(x) for x in o.body}
+        keep = []
+        for n in c.body:
+            name = member(n)
+            if name and ast.dump(n) not in have and not name.startswith("__") and not name.endswith(("_sql", "_")) \
+                    and _name_count(name) == 0 \
+                    and len(re.findall(r"\b%s\b" % re.escape(name), new_text)) == 1:
+                continue
+            keep.append(n)
+        c.body = keep or [ast.Pass()]
 
 
 def _canon(tree):
@@ -1036,8 +1093,17 @@ class Analyzer:
         if fp.new and fp.old and fp.new != fp.old:
             # renamed: nothing imports the new name, and importing the old one fails
             return import_failure(m, fp.old) if fp.old.endswith(".py") and fp.new.endswith(".py") else ALL
-        if types_only_change("\n".join(old_lines), "\n".join(new_lines)):
+        try:
+            out = self._analyze_chunks(fp, path, idx, old_lines)
+        except Exception:  # noqa: BLE001  (an impact of ALL mixed into a set, say)
+            out = ALL
+        # costly answers only: is the edit one that cannot change behaviour at all?
+        if (out is ALL or len(out) > 200) and types_only_change("\n".join(old_lines), "\n".join(new_lines)):
             return set()
+        return out
+
+    def _analyze_chunks(self, fp, path, idx, old_lines):
+        m = self.m
         out = set()
         for rem, add, pos in chunks(fp):
             real_rem = [(n, t) for n, t in rem if not is_comment_or_blank(t) or in_string(idx, n)]
