@@ -313,6 +313,104 @@ def strip_docstrings(tree):
     return tree
 
 
+def has_future_annotations(tree):
+    return any(isinstance(n, ast.ImportFrom) and n.module == "__future__" and any(a.name == "annotations" for a in n.names)
+               for n in tree.body)
+
+
+def strip_types(tree):
+    """Drop what `from __future__ import annotations` keeps from ever being evaluated: annotations of
+    function parameters and returns, of module-level and local variables, and `if TYPE_CHECKING:`
+    blocks.  Class-level annotations stay (dataclasses and the like read them)."""
+    def walk(node, in_class):
+        for f, v in ast.iter_fields(node):
+            if isinstance(v, list):
+                for x in v:
+                    if isinstance(x, ast.AST):
+                        walk(x, isinstance(node, ast.ClassDef) and f == "body")
+            elif isinstance(v, ast.AST):
+                walk(v, False)
+        if isinstance(node, ast.arg):
+            node.annotation = None
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            node.returns = None
+        elif isinstance(node, ast.AnnAssign) and not in_class:
+            node.annotation = ast.Constant(value=None)
+        elif isinstance(node, ast.If) and isinstance(node.test, (ast.Name, ast.Attribute)) \
+                and getattr(node.test, "id", getattr(node.test, "attr", None)) == "TYPE_CHECKING":
+            node.body = [ast.Pass()]
+    walk(tree, False)
+    return tree
+
+
+def types_only_change(old_text, new_text):
+    """True when two versions of a module differ only in what strip_types drops (and docstrings,
+    comments, layout), in a module that does not evaluate its annotations."""
+    try:
+        a = ast.parse(old_text)
+        b = ast.parse(new_text)
+    except SyntaxError:
+        return False
+    if not (has_future_annotations(a) and has_future_annotations(b)):
+        return False
+    _drop_added_stdlib_imports(a, b)
+    return _canon(a) == _canon(b)
+
+
+def _canon(tree):
+    tree = strip_docstrings(strip_types(tree))
+    # a run of consecutive undecorated module-level functions only binds names: order is moot
+    body, run = [], []
+    for n in tree.body + [None]:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and not n.decorator_list:
+            run.append(n)
+            continue
+        if len({f.name for f in run}) == len(run):
+            run.sort(key=lambda f: f.name)
+        body += run
+        run = []
+        if n is not None:
+            body.append(n)
+    tree.body = body
+    return ast.dump(tree)
+
+
+def _drop_added_stdlib_imports(old, new):
+    """Drop from `new` module-level imports of standard-library modules that `old` lacks, when the
+    name they bind is used nowhere else in either version (importing such a module has no effect
+    on sqlglot)."""
+    std = getattr(sys, "stdlib_module_names", ())
+    have = {ast.dump(n) for n in old.body}
+    names = set()
+    for t in (old, new):
+        for x in ast.walk(t):
+            if isinstance(x, ast.Name):
+                names.add(x.id)
+            elif isinstance(x, ast.Attribute):
+                names.add(x.attr)
+            elif isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(x.name)
+            elif isinstance(x, ast.alias) and x not in getattr(x, "_new", ()):
+                pass
+    bound_old = set()
+    for n in old.body:
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            bound_old |= {(a.asname or a.name).split(".")[0] for a in n.names}
+    keep = []
+    for n in new.body:
+        if isinstance(n, (ast.Import, ast.ImportFrom)) and ast.dump(n) not in have:
+            if isinstance(n, ast.Import):
+                mods = [a.name for a in n.names]
+            else:
+                mods = [n.module or ""] if not n.level else ["."]
+            bound = {(a.asname or a.name).split(".")[0] for a in n.names}
+            if all(md.split(".")[0] in std for md in mods) and "*" not in bound \
+                    and not (bound & names) and not (bound & bound_old):
+                continue
+        keep.append(n)
+    new.body = keep
+
+
 class Stmt:
     __slots__ = ("node", "start", "end", "func", "cls", "compound", "parent")
 
@@ -921,7 +1019,7 @@ class Analyzer:
         m = self.m
         path = fp.old or fp.new
         if fp.is_deleted:
-            return ALL
+            return import_failure(m, path) if path.endswith(".py") else ALL     # importing it fails
         if fp.is_new or path not in {p for p in all_sources()}:
             return self.new_module(fp)
         old_lines = src_lines(path)
@@ -936,7 +1034,10 @@ class Analyzer:
         except SyntaxError:
             return import_failure(m, path)
         if fp.new and fp.old and fp.new != fp.old:
-            return ALL  # rename
+            # renamed: nothing imports the new name, and importing the old one fails
+            return import_failure(m, fp.old) if fp.old.endswith(".py") and fp.new.endswith(".py") else ALL
+        if types_only_change("\n".join(old_lines), "\n".join(new_lines)):
+            return set()
         out = set()
         for rem, add, pos in chunks(fp):
             real_rem = [(n, t) for n, t in rem if not is_comment_or_blank(t) or in_string(idx, n)]
