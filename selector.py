@@ -934,7 +934,7 @@ class Analyzer:
         try:
             ast.parse("\n".join(new_lines))
         except SyntaxError:
-            return ALL
+            return import_failure(m, path)
         if fp.new and fp.old and fp.new != fp.old:
             return ALL  # rename
         out = set()
@@ -1105,6 +1105,317 @@ def test_importers(m, path):
     for f in files:
         out |= set(m.by_file.get(f, ()))
     _importers_cache[path] = out
+    return out
+
+
+# ------------------------------------------------------------------- import failures
+# A module that cannot be imported (a syntax error, say) fails exactly the tests that try to
+# import it: test files that import it (or a module that imports it) when collected, tests that
+# run an import statement reaching it, tests that ran code of a module that imports it, and tests
+# that made a dialect whose module imports it (dialects are imported by name, see dialect_users).
+
+_imp = {"mods": None, "top": {}, "clo": {}, "lazy": {}, "dyn": None, "users": None, "trees": {}}
+
+
+def py_modules():
+    if _imp["mods"] is None:
+        mods = {}
+        for p in SRC.rglob("*.py"):
+            rel = p.relative_to(SRC).as_posix()
+            name = rel[:-3].replace("/", ".")
+            if name.endswith(".__init__"):
+                name = name[:-9]
+            mods[name] = rel
+        _imp["mods"] = mods
+    return _imp["mods"]
+
+
+def lazy_targets(pkg, attr):
+    """Modules a package's module-level __getattr__ may import to give `attr`."""
+    mods = py_modules()
+    rel = mods.get(pkg)
+    if rel is None:
+        return []
+    if pkg not in _imp["lazy"]:
+        text = (SRC / rel).read_text()
+        tree = ast.parse(text)
+        has = any(isinstance(n, ast.FunctionDef) and n.name == "__getattr__" for n in tree.body)
+        names = set()
+        for n in tree.body:
+            if isinstance(n, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
+                names.add(n.name)
+            elif isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                for t in (n.targets if isinstance(n, ast.Assign) else [n.target]):
+                    for x in ast.walk(t):
+                        if isinstance(x, ast.Name):
+                            names.add(x.id)
+            elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                for a in n.names:
+                    names.add((a.asname or a.name).split(".")[0])
+        _imp["lazy"][pkg] = (has, text, names)
+    has, text, names = _imp["lazy"][pkg]
+    if not has or attr in names:
+        return []
+    found = [mm.group(1) for mm in re.finditer(r'"%s"\s*:\s*\(\s*"([\w.]+)"' % re.escape(attr), text)]
+    found += [pkg + "." + mm.group(1) for mm in re.finditer(r'"%s"\s*:\s*"(\w+)"' % re.escape(attr), text)]
+    if pkg + "." + attr.lower() in mods:
+        found.append(pkg + "." + attr.lower())
+    found = [f for f in found if f in mods]
+    if not found:   # unknown: any submodule
+        found = [x for x in mods if x.startswith(pkg + ".") and x.count(".") == pkg.count(".") + 1]
+    return found
+
+
+def _import_targets(cur, is_pkg, node):
+    """Modules (and their parent packages) an import statement imports."""
+    mods = py_modules()
+    out = []
+    if isinstance(node, ast.Import):
+        out = [a.name for a in node.names]
+    else:
+        base = node.module or ""
+        if node.level:
+            parts = cur.split(".")
+            if not is_pkg:
+                parts = parts[:-1]
+            if node.level > 1:
+                parts = parts[:len(parts) - (node.level - 1)]
+            base = ".".join(parts + ([base] if base else []))
+        out.append(base)
+        for a in node.names:
+            if base + "." + a.name in mods:
+                out.append(base + "." + a.name)
+            else:
+                out.extend(lazy_targets(base, a.name))
+    res = set()
+    for n in out:
+        parts = n.split(".")
+        for i in range(1, len(parts) + 1):
+            q = ".".join(parts[:i])
+            if q in mods:
+                res.add(q)
+    return res
+
+
+def module_imports(name, all_levels=False):
+    """(line, modules, runs at import time) for the import statements of a module: those that run
+    when it is imported (module level, class bodies, try/if, not under TYPE_CHECKING) or, with
+    all_levels, every one."""
+    key = (name, all_levels)
+    r = _imp["top"].get(key)
+    if r is not None:
+        return r
+    rel = py_modules()[name]
+    tree = _imp["trees"].get(rel)
+    if tree is None:
+        try:
+            tree = ast.parse((SRC / rel).read_text())
+        except SyntaxError:
+            tree = ast.Module(body=[], type_ignores=[])
+        _imp["trees"][rel] = tree
+    is_pkg = rel.endswith("__init__.py")
+    found = []
+
+    def walk(body, top):
+        for n in body:
+            if isinstance(n, (ast.Import, ast.ImportFrom)):
+                found.append((n.lineno, _import_targets(name, is_pkg, n), top))
+            elif isinstance(n, ast.If) and _is_type_checking(n.test):
+                walk(n.orelse, top)
+                if all_levels:
+                    walk(n.body, False)
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                walk(n.body, False)
+            else:
+                for f in ("body", "orelse", "finalbody", "handlers"):
+                    sub = getattr(n, f, None)
+                    if isinstance(sub, list):
+                        walk(sub, top)
+    walk(tree.body, True)
+    _imp["top"][key] = found
+    return found
+
+
+def _is_type_checking(test):
+    return any(isinstance(x, ast.Name) and x.id == "TYPE_CHECKING" or isinstance(x, ast.Attribute) and x.attr == "TYPE_CHECKING"
+               for x in ast.walk(test))
+
+
+def import_closure(name):
+    """Every module imported when `name` is imported."""
+    r = _imp["clo"].get(name)
+    if r is not None:
+        return r
+    mods = py_modules()
+    seen = set()
+    parts = name.split(".")
+    stack = [".".join(parts[:i]) for i in range(1, len(parts) + 1)]
+    while stack:
+        q = stack.pop()
+        if q in seen or q not in mods:
+            continue
+        seen.add(q)
+        for _, ms, top in module_imports(q):
+            if top:
+                for x in ms:
+                    p = x.split(".")
+                    stack.extend(".".join(p[:i]) for i in range(1, len(p) + 1))
+    _imp["clo"][name] = seen
+    return seen
+
+
+def dialect_users(m):
+    """Dialect module -> tests that made or looked up one of its dialect classes."""
+    if _imp["users"] is None:
+        users = {}
+        p = APP / "data" / "dialect_users.txt"
+        lines = [x for x in (p.read_text().splitlines() if p.exists() else ()) if x.strip() and not x.startswith("#")]
+        cur = None
+        ds = None
+        for line in lines:
+            if line.startswith("@ "):
+                cur, ds = line[2:].strip(), None
+            elif ds is None:
+                ds = line.split()
+            else:
+                cls = None
+                for item in line.split():
+                    c, _, name = item.rpartition("::")
+                    cls = c or cls
+                    n = m.num.get("%s::%s::%s" % (cur, cls, name) if cls else "%s::%s" % (cur, name))
+                    if n is not None:
+                        for d in ds:
+                            users.setdefault("sqlglot.dialects." + d, set()).add(n)
+                ds = None
+        _imp["users"] = users
+    return _imp["users"]
+
+
+def _dynamic_keys():
+    """Test ids (or class prefixes ending in '::') whose code imports modules by a computed name
+    or runs Python in a subprocess."""
+    keys = []
+    pat = re.compile(r"importlib|pkgutil|__import__|import_module|runpy|subprocess")
+    for p in sorted((SRC / "tests").rglob("test_*.py")):
+        rel = p.relative_to(SRC).as_posix()
+        lines = src_lines(rel)
+        if lines is None:
+            continue
+        try:
+            tree = ast.parse("\n".join(lines))
+        except SyntaxError:
+            keys.append(rel + "::")
+            continue
+
+        def walk(body, prefix):
+            for n in body:
+                if isinstance(n, ast.ClassDef):
+                    walk(n.body, prefix + [n.name])
+                elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and pat.search("\n".join(lines[n.lineno - 1:n.end_lineno])):
+                    if n.name.startswith("test"):
+                        keys.append("::".join([rel] + prefix + [n.name]))
+                    else:   # a helper or setUp: the whole class
+                        keys.append("::".join([rel] + prefix) + "::")
+        walk(tree.body, [])
+    return keys
+
+
+def _load_import_cache():
+    if "cache" not in _imp:
+        c = None
+        p = APP / "data" / "imports.marshal"
+        if p.exists():
+            import marshal
+            with open(p, "rb") as f:
+                c = marshal.load(f)
+            _imp["mods"] = c["mods"]
+            for name, lst in c["top"].items():
+                _imp["top"][(name, False)] = [(ln, set(ms), top) for ln, ms, top in lst if top]
+                _imp["top"][(name, True)] = [(ln, set(ms), top) for ln, ms, top in lst]
+        _imp["cache"] = c
+    return _imp["cache"]
+
+
+def build_import_cache(out):
+    import marshal
+    mods = py_modules()
+    top = {name: [(ln, sorted(ms), t) for ln, ms, t in module_imports(name, all_levels=True)] for name in mods}
+    with open(out, "wb") as f:
+        marshal.dump({"mods": mods, "top": top, "dyn": _dynamic_keys()}, f)
+
+
+def dynamic_importers(m):
+    if _imp["dyn"] is None:
+        c = _load_import_cache()
+        keys = c["dyn"] if c else _dynamic_keys()
+        acc = set()
+        for k in keys:
+            if k.endswith("::"):
+                acc.update(m.num[i] for i in m.num if i.startswith(k))
+            elif k in m.num:
+                acc.add(m.num[k])
+        _imp["dyn"] = acc
+    return _imp["dyn"]
+
+
+def _test_importers_by_graph(m, name):
+    """Tests of test module `name` and of every test module importing it, directly or not."""
+    r = _imp.setdefault("timp", {}).get(name)
+    if r is not None:
+        return r
+    mods = py_modules()
+    rev = _imp.get("trev")
+    if rev is None:
+        rev = {}
+        for x, rel in mods.items():
+            if rel.startswith("tests/"):
+                for _, ms, _ in module_imports(x, all_levels=True):
+                    for y in ms:
+                        rev.setdefault(y, set()).add(x)
+        _imp["trev"] = rev
+    seen = {name}
+    stack = [name]
+    while stack:
+        for y in rev.get(stack.pop(), ()):
+            if y not in seen:
+                seen.add(y)
+                stack.append(y)
+    out = set()
+    for x in seen:
+        out.update(m.by_file.get(mods[x], ()))
+    _imp["timp"][name] = out
+    return out
+
+
+def import_failure(m, path):
+    """Tests that fail when the sqlglot module at `path` raises on import."""
+    _load_import_cache()
+    mods = py_modules()
+    name = path[:-3].replace("/", ".")
+    if name.endswith(".__init__"):
+        name = name[:-9]
+    if name not in mods:
+        return ALL
+    dep = {x for x in mods if name in import_closure(x)}     # modules that cannot be imported
+    out = set()
+    users = dialect_users(m)
+    for x in dep:
+        rel = mods[x]
+        if rel.startswith("sqlglot/"):
+            out |= m.file_union(rel)
+        if x.startswith("sqlglot.dialects."):
+            out |= users.get(x, set())
+    for x, rel in mods.items():
+        for ln, ms, top in module_imports(x, all_levels=True):
+            if not (ms & dep):
+                continue
+            if rel.startswith("tests/"):
+                out |= _test_importers_by_graph(m, x)
+            elif not top:
+                out |= m.lines(rel, ln, ln)
+    out |= dynamic_importers(m)
+    _imp["hit"] = True
+    log("import failure", path, len(dep), "modules", len(out), "tests")
     return out
 
 
@@ -1327,10 +1638,11 @@ def main():
     total = 0
     for patch in sorted((DATA / "commits").glob("*.patch")):
         text = patch.read_text(encoding="utf-8", errors="replace")
+        _imp["hit"] = False
         sel = select_for_commit(m, an, text)
         if sel is ALL:
             sel = set(by_num)
-        elif tpcds in sel and tpcds_unchanged(text):
+        elif tpcds in sel and not _imp["hit"] and tpcds_unchanged(text):
             sel = sel - {tpcds}
         workers = split(by_num, sel)
         total += len(sel)
@@ -1340,4 +1652,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:2] == ["--imports"]:
+        build_import_cache(sys.argv[2])
+    else:
+        main()
