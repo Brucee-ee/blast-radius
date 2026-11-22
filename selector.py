@@ -703,6 +703,8 @@ def defined_names(node):
 
 
 class Analyzer:
+    import_time_read = False
+
     def __init__(self, m):
         self.m = m
 
@@ -852,6 +854,7 @@ class Analyzer:
                     continue
                 if any(fname == hf and (qual == hq or qual.startswith(hq + ".")) for hf, hq in hook_ids):
                     continue
+                self.import_time_read = True    # read while some module was being imported
                 return None
         out = set()
         for n in N:
@@ -1136,12 +1139,24 @@ class Analyzer:
         if fp.new and fp.old and fp.new != fp.old:
             # renamed: nothing imports the new name, and importing the old one fails
             return import_failure(m, fp.old) if fp.old.endswith(".py") and fp.new.endswith(".py") else ALL
+        self.import_time_read = False
         try:
             out = self._analyze_chunks(fp, path, idx, old_lines)
         except Exception:  # noqa: BLE001  (an impact of ALL mixed into a set, say)
             out = ALL
         if out is not ALL and import_breaks(path, fp, old_lines, new_lines):
             return import_failure(m, path)
+        if out is not ALL and self.import_time_read:
+            # a changed class attribute is read while other modules are imported (by templates
+            # parsed in class bodies, say): those imports may now fail
+            for mod in import_breaks_elsewhere(fp):
+                rel = py_modules().get(mod)
+                if rel is None:
+                    return ALL
+                r = import_failure(m, rel)
+                if r is ALL:
+                    return ALL
+                out |= r
         # costly answers only: is the edit one that cannot change behaviour at all?
         if (out is ALL or len(out) > 200) and types_only_change("\n".join(old_lines), "\n".join(new_lines)):
             return set()
@@ -1548,6 +1563,21 @@ def _load_import_cache():
     return _imp["cache"]
 
 
+_IMPORT_ALL = """
+import sys, pkgutil, importlib
+sys.path.insert(0, %r)
+import sqlglot
+for info in sorted(pkgutil.walk_packages(sqlglot.__path__, prefix="sqlglot."), key=lambda i: i.name):
+    if info.name == "sqlglot.__main__":
+        continue
+    try:
+        importlib.import_module(info.name)
+        print("OK " + info.name)
+    except Exception:
+        print("FAIL " + info.name)
+"""
+
+
 def build_import_cache(out):
     import marshal
     mods = py_modules()
@@ -1559,8 +1589,14 @@ def build_import_cache(out):
         for m_ in re.finditer(r"^\s+([A-Za-z_]\w*)\s*(?::[^=\n]+)?=\s*\{", text, re.M):
             names.add(m_.group(1))
     counts = {n: sum(t.count(n) for t in texts) for n in names}
+    import subprocess
+    r = subprocess.run([sys.executable, "-S", "-c", _IMPORT_ALL % str(SRC)], capture_output=True, text=True,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0"), timeout=300)
+    importable = sorted(x for x in r.stdout.split("\n") if x.startswith("OK ")) if r.returncode == 0 else []
+    importable = [x[3:] for x in importable]
     with open(out, "wb") as f:
-        marshal.dump({"mods": mods, "top": top, "dyn": _dynamic_keys(), "counts": counts}, f)
+        marshal.dump({"mods": mods, "top": top, "dyn": _dynamic_keys(), "counts": counts,
+                      "importable": importable}, f)
 
 
 def dynamic_importers(m):
@@ -1960,6 +1996,21 @@ def _import_time_risky(old_body, new_body, future):
             return True
         return True
     return False
+
+
+def import_breaks_elsewhere(fp):
+    """sqlglot modules that the pinned sources import but the patched ones do not."""
+    c = _load_import_cache()
+    ok = (c or {}).get("importable")
+    if not ok:
+        return ()
+    try:
+        import tpgate
+        broken = tpgate.import_all_check([fp], SRC, apply_hunks, ok)
+    except Exception:  # noqa: BLE001
+        return ()
+    log("import-all check", fp.old or fp.new, sorted(broken)[:5], len(broken))
+    return broken
 
 
 def import_breaks(path, fp, old_lines, new_lines):
