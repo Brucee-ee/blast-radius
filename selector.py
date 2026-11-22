@@ -1335,6 +1335,8 @@ def main():
         elif tpcds in sel and tpcds_unchanged(text):
             sel = sel - {tpcds}
         workers = split(by_num, sel)
+        if workers and max(sum(round(by_num[n]["seconds"] * 1000) for n in w) for w in workers) / 1000 + 2 * len(workers) < 2.5:
+            workers = []  # EXPERIMENT exp11: drop selections costing under 2.5 s
         total += len(sel)
         log(patch.stem, len(sel))
         print(json.dumps({"commit": patch.stem, "workers": workers}))
