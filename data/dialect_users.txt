@@ -1,5 +1,5 @@
 # Dialect modules (under sqlglot.dialects) whose dialect classes each test made or looked up
-# (Dialect.__init__, get, get_or_raise), from one run of the pinned commit's tests with
+# (Dialect.__init__, get, get_or_raise, Dialect[...], Dialect.classes), from one run of the pinned commit's tests with
 # build/dialect_usage.py.  '@ <test file>', then '<dialects>' and a line of that file's tests
 # ('Class::test' separated by spaces; a test without 'Class::' repeats the previous class).
 @ tests/dialects/test_athena.py
@@ -96,7 +96,7 @@ TestDAX::test_evaluate
 dax dialect duckdb
 TestDAX::test_filter test_order_by
 @ tests/dialects/test_dialect.py
-athena bigquery clickhouse databricks dax dialect doris dremio drill druid duckdb dune exasol fabric hive materialize mysql oracle postgres presto prql redshift risingwave snowflake solr spark spark2 sqlite starrocks tableau teradata trino tsql
+athena bigquery clickhouse databricks dax dialect doris dremio drill druid duckdb dune exasol fabric hive materialize mysql oracle postgres presto prql redshift risingwave singlestore snowflake solr spark spark2 sqlite starrocks tableau teradata trino tsql
 TestDialect::test_enum
 athena bigquery clickhouse databricks dialect doris dremio drill druid duckdb dune exasol fabric hive materialize mysql oracle postgres presto redshift risingwave snowflake solr spark spark2 sqlite starrocks tableau teradata trino tsql
 TestDialect::test_partition_by_excluding
@@ -566,7 +566,9 @@ TestPresto::test_regex
 bigquery dialect duckdb hive presto snowflake spark spark2
 TestPresto::test_replace
 bigquery dialect presto
-TestPresto::test_approx_percentile test_to_char
+TestPresto::test_approx_percentile
+bigquery dialect presto teradata
+TestPresto::test_to_char
 dialect duckdb hive presto spark spark2
 TestPresto::test_ddl test_encode_decode test_quotes
 dialect hive mysql presto spark spark2 starrocks
