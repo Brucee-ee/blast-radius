@@ -30,6 +30,29 @@ def pytest_configure(config):
         _note(type(r) if not isinstance(r, type) else r)
         return r
     Dialect.get_or_raise = classmethod(gor)
+    # lookups by name through the metaclass: Dialect["teradata"], Dialect.get(...) on subclasses
+    meta = type(Dialect)
+    mgi = meta.__getitem__
+    def getitem(cls, key):      # mgi is bound (a classmethod of the metaclass)
+        r = mgi(key)
+        _note(r)
+        return r
+    meta.__getitem__ = getitem
+    if "get" in vars(meta):
+        mg = meta.get
+        def mget(cls, *a, **k):
+            r = mg(*a, **k)
+            _note(r)
+            return r
+        meta.get = mget
+    if isinstance(vars(meta).get("classes"), property):
+        mc = vars(meta)["classes"].fget
+        def classes(cls):
+            r = mc(cls)
+            for v in (r.values() if isinstance(r, dict) else ()):
+                _note(v)
+            return r
+        meta.classes = property(classes)
 
 def pytest_runtest_setup(item):
     _cur[0] = item.nodeid
