@@ -1149,8 +1149,10 @@ class Analyzer:
         if new_lines is None or idx is None:
             return ALL
         try:
-            ast.parse("\n".join(new_lines))
-        except SyntaxError:
+            # compile, not just parse: repeated keywords, `return` outside a function and the like
+            # are errors only the compiler reports
+            compile("\n".join(new_lines), path, "exec", dont_inherit=True)
+        except (SyntaxError, ValueError):
             return import_failure(m, path)
         if fp.new and fp.old and fp.new != fp.old:
             # renamed: nothing imports the new name, and importing the old one fails
@@ -2092,7 +2094,8 @@ def test_file_impact(m, fp):
     try:
         a = ast.parse("\n".join(old_lines))
         b = ast.parse("\n".join(new_lines))
-    except SyntaxError:
+        compile(b, path, "exec", dont_inherit=True)     # errors only the compiler reports
+    except (SyntaxError, ValueError):
         return in_file
     if ast.dump(strip_docstrings(a)) == ast.dump(strip_docstrings(b)):
         return set()
