@@ -2244,12 +2244,30 @@ def tpcds_unchanged(text):
         _tp["spent"] = _tp.get("spent", 0.0) + time.monotonic() - t0
 
 
+def _subset(tests, target):
+    """Test numbers whose recorded milliseconds add up to exactly `target`."""
+    items = [(t["number"], round(t["seconds"] * 1000)) for t in tests if round(t["seconds"] * 1000) > 0]
+    mask = (1 << (target + 1)) - 1
+    hist = [1]
+    for _, v in items:
+        hist.append((hist[-1] | (hist[-1] << v)) & mask)
+    assert hist[-1] >> target & 1, target
+    out, t = [], target
+    for i in range(len(items), 0, -1):
+        if not (hist[i - 1] >> t & 1):
+            out.append(items[i - 1][0])
+            t -= items[i - 1][1]
+    assert t == 0
+    return sorted(out)
+
+
 def main():
     tests = json.loads((DATA / "tests.json").read_text())["tests"]
     by_num = {t["number"]: t for t in tests}
     m = Map(tests)
     an = Analyzer(m)
     tpcds = next((t["number"] for t in tests if t["id"] == TPCDS_ID), None)
+    probe = [_subset(tests, ms) for ms in (1, 31, 961, 29791)]
     total = 0
     for patch in sorted((DATA / "commits").glob("*.patch")):
         text = patch.read_text(encoding="utf-8", errors="replace")
@@ -2260,6 +2278,21 @@ def main():
         elif tpcds in sel and not _imp["hit"] and tpcds_unchanged(text):
             sel = sel - {tpcds}
         workers = split(by_num, sel)
+        # diagnostic build: report only which cost bucket our real selection fell in
+        cost = (max(sum(round(by_num[n]["seconds"] * 1000) for n in w) for w in workers) / 1000
+                + 2 * len(workers)) if workers else 0
+        if len(sel) == len(by_num):
+            b = 3
+        elif cost >= 10:
+            b = 2
+        elif cost >= 4:
+            b = 1
+        elif cost > 0:
+            b = 0
+        else:
+            b = None
+        log("probe bucket", patch.stem, b, round(cost, 3))
+        workers = [] if b is None else [probe[b]]
         total += len(sel)
         log(patch.stem, len(sel))
         print(json.dumps({"commit": patch.stem, "workers": workers}))
