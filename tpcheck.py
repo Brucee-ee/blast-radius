@@ -29,6 +29,8 @@ def _h(*parts):
 
 
 def main():
+    if sys.argv[1] == "--serve":
+        return serve(sys.argv[2], sys.argv[3])
     root, data_path = sys.argv[1], sys.argv[2]
     arg = sys.argv[3] if len(sys.argv) > 3 else ""
     dump = arg == "dump"
@@ -39,7 +41,51 @@ def main():
     sys.path.insert(0, root)
     with open(data_path, "rb") as f:
         data = pickle.load(f)
+    run(data_path, data, only, dump)
 
+
+def serve(root, data_path):
+    """Check server: imports the pinned sqlglot package once, reports the modules that loaded,
+    and for each request line ("<exec_flag> [query indices]") forks a child that runs the check
+    exactly as a fresh process would and answers "RC <exit code>".  tpgate sends a request only
+    when no patched module is among the loaded ones, so the child imports every patched module
+    (and everything importing it) fresh from <root>, with the patch applied."""
+    import resource
+    import signal
+
+    sys.path.insert(0, root)
+    with open(data_path, "rb") as f:
+        data = pickle.load(f)
+    import sqlglot  # noqa: F401
+    loaded = sorted(m for m in sys.modules if m == "sqlglot" or m.startswith("sqlglot."))
+    out = sys.stdout
+    out.write("READY " + ",".join(loaded) + "\n")
+    out.flush()
+    for line in sys.stdin:
+        parts = line.split()
+        if not parts:
+            continue
+        only = {int(x) for x in parts[1].split(",")} if len(parts) > 1 else None
+        pid = os.fork()
+        if pid == 0:
+            code = 1
+            try:
+                os.environ["BR_TP_EXEC"] = "1" if parts[0] == "1" else ""
+                resource.setrlimit(resource.RLIMIT_CPU, (CPU_LIMIT, CPU_LIMIT + 1))
+                signal.alarm(60)
+                run(data_path, data, only, False)
+                code = 0
+            except SystemExit as e:
+                code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+            except BaseException:  # noqa: BLE001
+                code = 1
+            os._exit(code)
+        _, status = os.waitpid(pid, 0)
+        out.write("RC %d\n" % os.waitstatus_to_exitcode(status))
+        out.flush()
+
+
+def run(data_path, data, only, dump):
     from sqlglot import find_tables, parse_one, transpile
     from sqlglot.executor import execute
     from sqlglot.executor import python as pyexec
