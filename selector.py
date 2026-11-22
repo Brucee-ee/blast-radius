@@ -1140,6 +1140,8 @@ class Analyzer:
             out = self._analyze_chunks(fp, path, idx, old_lines)
         except Exception:  # noqa: BLE001  (an impact of ALL mixed into a set, say)
             out = ALL
+        if out is not ALL and import_breaks(path, fp, old_lines, new_lines):
+            return import_failure(m, path)
         # costly answers only: is the edit one that cannot change behaviour at all?
         if (out is ALL or len(out) > 200) and types_only_change("\n".join(old_lines), "\n".join(new_lines)):
             return set()
@@ -1550,8 +1552,15 @@ def build_import_cache(out):
     import marshal
     mods = py_modules()
     top = {name: [(ln, sorted(ms), t) for ln, ms, t in module_imports(name, all_levels=True)] for name in mods}
+    # how often each class-level dict setting's name occurs in the sources (see value_sites)
+    texts = [(SRC / rel).read_text(encoding="utf-8") for rel in mods.values() if rel.startswith("sqlglot/")]
+    names = set()
+    for text in texts:
+        for m_ in re.finditer(r"^\s+([A-Za-z_]\w*)\s*(?::[^=\n]+)?=\s*\{", text, re.M):
+            names.add(m_.group(1))
+    counts = {n: sum(t.count(n) for t in texts) for n in names}
     with open(out, "wb") as f:
-        marshal.dump({"mods": mods, "top": top, "dyn": _dynamic_keys()}, f)
+        marshal.dump({"mods": mods, "top": top, "dyn": _dynamic_keys(), "counts": counts}, f)
 
 
 def dynamic_importers(m):
@@ -1746,8 +1755,12 @@ def value_sites(attr, changed, depth=0, field=False):
     if field and not _plain_field(attr):
         return None
     if not field:
-        _sqlglot_trees("\0")                       # (loads the texts)
-        if sum(item[1].count(attr) for item in _vs["trees"]) > 40:
+        c = _load_import_cache()
+        n = (c or {}).get("counts", {}).get(attr)
+        if n is None:
+            _sqlglot_trees("\0")                   # (loads the texts)
+            n = sum(item[1].count(attr) for item in _vs["trees"])
+        if n > 40:
             return None                              # used all over (arg_types and the like): not worth it
     out = {}
     for rel, tree in _sqlglot_trees(attr):
@@ -1829,6 +1842,115 @@ def dict_value_change(old, new):
         return None
     changed = {k for k, a, b in zip(ok, old.values, new.values) if ast.dump(a) != ast.dump(b)}
     return changed or None
+
+
+# ------------------------------------------------------------------- import-time exceptions
+# An edit to code that runs when the module is imported can make the import raise even though
+# the file still parses (a class base that is not a class, a name or member that does not exist,
+# a call given bad arguments...).  Then every test importing the module fails, as for a syntax
+# error.  Edits that only change literals inside literal containers (dict and list displays, the
+# right side of an assignment) cannot raise; any other import-time edit is checked by importing
+# the patched module in a scratch copy (tpgate's).
+
+_LITERAL_PARENTS = (ast.Dict, ast.List, ast.Tuple, ast.Set)
+
+
+def _is_literal(n):
+    if isinstance(n, ast.Constant):
+        return True
+    if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.UAdd)) and isinstance(n.operand, ast.Constant):
+        return True
+    if isinstance(n, _LITERAL_PARENTS):
+        return all(x is None or _is_literal(x) for x in getattr(n, "elts", ()) or list(getattr(n, "keys", ())) + list(getattr(n, "values", ())))
+    return False
+
+
+def _safe_diff(a, b, top=True):
+    """Can replacing expression `a` (import-time code) by `b` not raise anything new?"""
+    if ast.dump(a) == ast.dump(b):
+        return True
+    if isinstance(a, ast.Lambda) and isinstance(b, ast.Lambda) and ast.dump(a.args) == ast.dump(b.args):
+        return True                                   # the body runs later, not at import
+    if _is_literal(a) and _is_literal(b):
+        return True
+    if type(a) is not type(b) or not isinstance(a, _LITERAL_PARENTS):
+        return False
+    fa = getattr(a, "elts", None)
+    if fa is not None:
+        fb = b.elts
+        if len(fa) != len(fb):
+            return all(_is_literal(x) for x in fa + fb)
+        return all(_safe_diff(x, y, False) for x, y in zip(fa, fb))
+    if len(a.keys) != len(b.keys):
+        return False
+    return all((ka is None and kb is None or ka is not None and kb is not None and _safe_diff(ka, kb, False))
+               and _safe_diff(va, vb, False) for ka, kb, va, vb in zip(a.keys, b.keys, a.values, b.values))
+
+
+def _import_time_risky(old_body, new_body, future):
+    """Does some import-time code differ between the two statement lists in a way that could
+    raise?"""
+    if len(old_body) != len(new_body):
+        return True
+    for a, b in zip(old_body, new_body):
+        if ast.dump(a) == ast.dump(b):
+            continue
+        if type(a) is not type(b):
+            return True
+        if isinstance(a, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            hdr = lambda f: ast.dump(ast.Module([*f.decorator_list, *f.args.defaults,
+                                                 *[d for d in f.args.kw_defaults if d is not None]], []))
+            if hdr(a) != hdr(b) or a.name != b.name:
+                return True
+            if not future and ast.dump(a.args) != ast.dump(b.args):
+                return True                           # annotations evaluated at def time
+            if not future and ast.dump(a.returns or ast.Pass()) != ast.dump(b.returns or ast.Pass()):
+                return True
+            continue
+        if isinstance(a, ast.ClassDef):
+            hdr = lambda c: ast.dump(ast.Module([*c.bases, *c.keywords, *c.decorator_list], []))
+            if hdr(a) != hdr(b) or a.name != b.name:
+                return True
+            if _import_time_risky(a.body, b.body, future):
+                return True
+            continue
+        if isinstance(a, (ast.Assign, ast.AnnAssign)):
+            ta = a.targets if isinstance(a, ast.Assign) else [a.target]
+            tb = b.targets if isinstance(b, ast.Assign) else [b.target]
+            if ast.dump(ast.Module(ta, [])) != ast.dump(ast.Module(tb, [])):
+                return True
+            if (a.value is None) != (b.value is None) or a.value is not None and not _safe_diff(a.value, b.value):
+                return True
+            if isinstance(a, ast.AnnAssign) and not future and ast.dump(a.annotation) != ast.dump(b.annotation):
+                return True
+            continue
+        if isinstance(a, ast.Expr) and isinstance(a.value, ast.Constant) and isinstance(b.value, ast.Constant):
+            continue                                  # docstrings
+        if isinstance(a, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
+            return True
+        return True
+    return False
+
+
+def import_breaks(path, fp, old_lines, new_lines):
+    """True when the patched module cannot be imported (and the pinned one can)."""
+    try:
+        a = ast.parse("\n".join(old_lines))
+        b = ast.parse("\n".join(new_lines))
+    except SyntaxError:
+        return False
+    if not _import_time_risky(a.body, b.body, has_future_annotations(a) and has_future_annotations(b)):
+        return False
+    name = path[:-3].replace("/", ".")
+    if name.endswith(".__init__"):
+        name = name[:-9]
+    try:
+        import tpgate
+        r = tpgate.import_check([fp], SRC, apply_hunks, name, APP / "tpcheck.py", APP / "data" / "tpc.pkl")
+    except Exception:  # noqa: BLE001
+        return False
+    log("import check", path, "breaks" if r else "imports")
+    return r
 
 
 def _qual(tree, fn):
