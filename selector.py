@@ -1865,26 +1865,54 @@ def _is_literal(n):
     return False
 
 
-def _safe_diff(a, b, top=True):
+def _safe_diff(a, b, in_call=False):
     """Can replacing expression `a` (import-time code) by `b` not raise anything new?"""
     if ast.dump(a) == ast.dump(b):
         return True
     if isinstance(a, ast.Lambda) and isinstance(b, ast.Lambda) and ast.dump(a.args) == ast.dump(b.args):
         return True                                   # the body runs later, not at import
-    if _is_literal(a) and _is_literal(b):
+    if in_call:
+        # an argument handed to a call made at import: only a literal of the same harmless kind
+        # (a bool, a number, None) for another
+        if isinstance(a, ast.Constant) and isinstance(b, ast.Constant):
+            ok = (bool, int, float, type(None))
+            return isinstance(a.value, ok) and isinstance(b.value, ok) and \
+                (type(a.value) is type(b.value) or a.value is None or b.value is None)
+    elif _is_literal(a) and _is_literal(b):
         return True
-    if type(a) is not type(b) or not isinstance(a, _LITERAL_PARENTS):
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, ast.Compare):
+        # another comparison operator on the same operands evaluates the same things
+        return len(a.ops) == len(b.ops) and _safe_diff(a.left, b.left, in_call) and \
+            all(_safe_diff(x, y, in_call) for x, y in zip(a.comparators, b.comparators))
+    if isinstance(a, ast.Call):
+        return ast.dump(a.func) == ast.dump(b.func) and len(a.args) == len(b.args) and \
+            [k.arg for k in a.keywords] == [k.arg for k in b.keywords] and \
+            all(_safe_diff(x, y, True) for x, y in zip(a.args, b.args)) and \
+            all(_safe_diff(x.value, y.value, True) for x, y in zip(a.keywords, b.keywords))
+    if isinstance(a, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+        parts = ("key", "value") if isinstance(a, ast.DictComp) else ("elt",)
+        if len(a.generators) != len(b.generators):
+            return False
+        for ga, gb in zip(a.generators, b.generators):
+            if ast.dump(ga.target) != ast.dump(gb.target) or ga.is_async != gb.is_async or len(ga.ifs) != len(gb.ifs):
+                return False
+            if not _safe_diff(ga.iter, gb.iter, in_call) or not all(_safe_diff(x, y, in_call) for x, y in zip(ga.ifs, gb.ifs)):
+                return False
+        return all(_safe_diff(getattr(a, p), getattr(b, p), in_call) for p in parts)
+    if not isinstance(a, _LITERAL_PARENTS):
         return False
     fa = getattr(a, "elts", None)
     if fa is not None:
         fb = b.elts
         if len(fa) != len(fb):
-            return all(_is_literal(x) for x in fa + fb)
-        return all(_safe_diff(x, y, False) for x, y in zip(fa, fb))
+            return not in_call and all(_is_literal(x) for x in fa + fb)
+        return all(_safe_diff(x, y, in_call) for x, y in zip(fa, fb))
     if len(a.keys) != len(b.keys):
         return False
-    return all((ka is None and kb is None or ka is not None and kb is not None and _safe_diff(ka, kb, False))
-               and _safe_diff(va, vb, False) for ka, kb, va, vb in zip(a.keys, b.keys, a.values, b.values))
+    return all((ka is None and kb is None or ka is not None and kb is not None and _safe_diff(ka, kb, in_call))
+               and _safe_diff(va, vb, in_call) for ka, kb, va, vb in zip(a.keys, b.keys, a.values, b.values))
 
 
 def _import_time_risky(old_body, new_body, future):
@@ -1898,10 +1926,12 @@ def _import_time_risky(old_body, new_body, future):
         if type(a) is not type(b):
             return True
         if isinstance(a, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            hdr = lambda f: ast.dump(ast.Module([*f.decorator_list, *f.args.defaults,
-                                                 *[d for d in f.args.kw_defaults if d is not None]], []))
-            if hdr(a) != hdr(b) or a.name != b.name:
+            if ast.dump(ast.Module(a.decorator_list, [])) != ast.dump(ast.Module(b.decorator_list, [])) or a.name != b.name:
                 return True
+            da = a.args.defaults + [d for d in a.args.kw_defaults if d is not None]
+            db = b.args.defaults + [d for d in b.args.kw_defaults if d is not None]
+            if len(da) != len(db) or not all(_safe_diff(x, y) for x, y in zip(da, db)):
+                return True                           # defaults are evaluated at def time
             if not future and ast.dump(a.args) != ast.dump(b.args):
                 return True                           # annotations evaluated at def time
             if not future and ast.dump(a.returns or ast.Pass()) != ast.dump(b.returns or ast.Pass()):
