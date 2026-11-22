@@ -228,6 +228,57 @@ def _ask(p, exec_only, only):
     return None
 
 
+def import_check(files, src, apply_hunks, module, checker, data_path, timeout=60):
+    """True when `module` fails to import (after `import sqlglot`) with the patch applied to the
+    scratch copy.  Uses the check server when it has none of the patched modules loaded."""
+    _ensure_base(src)
+    server = _server(checker, data_path)
+    touched = []
+    try:
+        paths = []
+        for fp in files:
+            path = fp.new if not fp.is_deleted else fp.old
+            target = SCRATCH / path
+            orig = src / path
+            if fp.is_deleted or not orig.exists():
+                return False
+            new_lines = apply_hunks(orig.read_text(encoding="utf-8").split("\n"), fp)
+            if new_lines is None:
+                return False
+            touched.append((target, orig))
+            target.write_text("\n".join(new_lines), encoding="utf-8")
+            paths.append(path)
+        rc = None
+        if server is not None and module not in _srv["mods"] and not any(
+                path.endswith(".py") and _module(path) in _srv["mods"] for path in paths):
+            try:
+                server.stdin.write("I " + module + "\n")
+                server.stdin.flush()
+                line = server.stdout.readline()
+                if line.startswith("RC "):
+                    rc = int(line[3:])
+            except Exception:  # noqa: BLE001
+                _srv["p"] = None
+        if rc is None:
+            code = ("import sys; sys.path.insert(0, %r); import importlib\n"
+                    "import sqlglot\nimportlib.import_module(%r)") % (str(SCRATCH), module)
+            env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0")
+            try:
+                rc = subprocess.run([sys.executable, "-S", "-c", code], stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, env=env, timeout=timeout).returncode
+            except subprocess.TimeoutExpired:
+                rc = 0
+        return rc != 0
+    finally:
+        for target, orig in touched:
+            try:
+                shutil.copyfile(orig, target)
+                st = orig.stat()
+                os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
+            except OSError:
+                pass
+
+
 def unchanged(files, src, apply_hunks, data_path, checker, only=None, timeout=60, mods=None):
     """True only when the patch provably leaves the TPC-DS pipeline's outputs alone."""
     edits = _edits(files)
