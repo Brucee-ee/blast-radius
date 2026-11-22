@@ -1699,16 +1699,20 @@ def _sqlglot_trees(word=None):
     out = []
     for item in _vs["trees"]:
         rel, text, tree = item
-        if word is not None and word not in text:
+        if word is not None and (word not in text or word.isidentifier() and not re.search(
+                r"(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])" % re.escape(word), text)):
             continue
         if tree is None:
             try:
                 tree = ast.parse(text)
             except SyntaxError:
                 tree = ast.Module(body=[], type_ignores=[])
-            for n in ast.walk(tree):
+            stack = [tree]
+            while stack:
+                n = stack.pop()
                 for c in ast.iter_child_nodes(n):
                     c._p = n
+                    stack.append(c)
             item[2] = tree
         out.append((rel, tree))
     return out
@@ -1951,12 +1955,19 @@ def _safe_diff(a, b, in_call=False):
                and _safe_diff(va, vb, in_call) for ka, kb, va, vb in zip(a.keys, b.keys, a.values, b.values))
 
 
-def _import_time_risky(old_body, new_body, future):
+def _seg(node, lines):
+    start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", ())])
+    return "\n".join(lines[start - 1:node.end_lineno])
+
+
+def _import_time_risky(old_body, new_body, future, ol=None, nl=None):
     """Does some import-time code differ between the two statement lists in a way that could
-    raise?"""
+    raise?  (`ol`, `nl`: the source lines, to skip statements whose text is unchanged.)"""
     if len(old_body) != len(new_body):
         return True
     for a, b in zip(old_body, new_body):
+        if ol is not None and _seg(a, ol) == _seg(b, nl):
+            continue
         if ast.dump(a) == ast.dump(b):
             continue
         if type(a) is not type(b):
@@ -1977,7 +1988,7 @@ def _import_time_risky(old_body, new_body, future):
             hdr = lambda c: ast.dump(ast.Module([*c.bases, *c.keywords, *c.decorator_list], []))
             if hdr(a) != hdr(b) or a.name != b.name:
                 return True
-            if _import_time_risky(a.body, b.body, future):
+            if _import_time_risky(a.body, b.body, future, ol, nl):
                 return True
             continue
         if isinstance(a, (ast.Assign, ast.AnnAssign)):
@@ -2020,7 +2031,8 @@ def import_breaks(path, fp, old_lines, new_lines):
         b = ast.parse("\n".join(new_lines))
     except SyntaxError:
         return False
-    if not _import_time_risky(a.body, b.body, has_future_annotations(a) and has_future_annotations(b)):
+    if not _import_time_risky(a.body, b.body, has_future_annotations(a) and has_future_annotations(b),
+                              old_lines, new_lines):
         return False
     name = path[:-3].replace("/", ".")
     if name.endswith(".__init__"):
