@@ -1662,9 +1662,15 @@ def test_file_impact(m, fp):
         if k not in fa or k not in fb or ast.dump(strip_docstrings(ast.Module([fa[k]], []))) != ast.dump(strip_docstrings(ast.Module([fb[k]], []))):
             changed.add(k)
     out = set()
+    helpers = {k[-1] for k in changed if not k[-1].startswith("test")}
+    if helpers:
+        callers = helper_callers(m, path, in_file, helpers)
+        if callers is None:
+            return in_file
+        out |= callers
     for k in changed:
         if not k[-1].startswith("test"):
-            return in_file
+            continue
         pre = path + "::" + "::".join(k)
         hit = [t["number"] for t in m.tests if t["id"] == pre]
         if not hit:
@@ -1672,6 +1678,79 @@ def test_file_impact(m, fp):
         out |= set(hit)
         # the same method inherited by test classes in other files
         out |= {n for n in in_file if m.tests[n]["id"].endswith("::" + k[-1])}
+    return out
+
+
+_LIFECYCLE = ("setUp", "tearDown", "setUpClass", "tearDownClass", "setUpModule", "tearDownModule",
+              "load_tests", "addClassCleanup", "addCleanup", "run", "subTest", "__init__", "__init_subclass__")
+
+
+def helper_callers(m, path, in_file, names):
+    """Tests that can call one of the helper functions or methods `names` of test file `path`
+    (only their bodies changed): test functions of `path` and of the test files importing it that
+    mention one of the names, directly or through other helpers mentioning them.  None when a
+    name is reached from code that runs outside a test function (module or class level, setUp and
+    the like), where the caller cannot be told."""
+    files = {path} | {m.tests[n]["file"] for n in in_file}
+    funcs = []          # (file, class path, name, referenced names)
+    for f in sorted(files):
+        lines = src_lines(f)
+        if lines is None:
+            return None
+        try:
+            tree = ast.parse("\n".join(lines))
+        except SyntaxError:
+            return None
+
+        def refs(node):
+            r = set()
+            for x in ast.walk(node):
+                if isinstance(x, ast.Name):
+                    r.add(x.id)
+                elif isinstance(x, ast.Attribute):
+                    r.add(x.attr)
+                elif isinstance(x, ast.Constant) and isinstance(x.value, str) and x.value.isidentifier():
+                    r.add(x.value)          # getattr(self, "name") and the like
+            return r
+
+        def walk(body, prefix, f=f):
+            for n in body:
+                if isinstance(n, ast.ClassDef):
+                    funcs.append((f, prefix, None, {r for b in n.bases + n.decorator_list for r in refs(b)}))
+                    walk(n.body, prefix + [n.name])
+                elif isinstance(n, FUNCS):
+                    funcs.append((f, prefix, n.name, refs(n)))
+                else:
+                    funcs.append((f, prefix, None, refs(n)))       # runs at import or class creation
+        walk(tree.body, [])
+    for name in names:
+        # called implicitly (unittest hooks, dunders, fixtures by parameter name, ...) or by no
+        # code we can see: its callers cannot be told
+        if name in _LIFECYCLE or name.startswith(("setUp", "tearDown", "asyncSetUp", "asyncTearDown", "__")) \
+                or not any(name in r for f, prefix, nm, r in funcs):
+            return None
+    reach = set(names)
+    hit = []
+    changed = True
+    while changed:
+        changed = False
+        for f, prefix, name, r in funcs:
+            if not (r & reach):
+                continue
+            if name is None or name in _LIFECYCLE:
+                return None
+            if name.startswith("test"):
+                hit.append((f, prefix, name))
+            elif name not in reach:
+                reach.add(name)
+                changed = True
+    out = set()
+    for f, prefix, name in hit:
+        tid = "::".join([f] + prefix + [name])
+        n = m.num.get(tid)
+        if n is not None:
+            out.add(n)
+        out |= {x for x in in_file if m.tests[x]["id"].endswith("::" + name)}   # inherited elsewhere
     return out
 
 
@@ -1724,7 +1803,7 @@ def select_for_file(m, an, fp, path, old):
             return test_file_impact(m, fp)
         if base in ("__init__.py", "conftest.py") or fp.is_new or fp.is_deleted or fp.old != fp.new:
             return ALL
-        return test_importers(m, path)      # shared test code such as tests/helpers.py
+        return test_file_impact(m, fp)      # shared test code such as tests/helpers.py
     if path.startswith("sqlglotc/"):
         return set(m.by_file.get("tests/test_sqlglotc.py", ())) | (ALL if not path.endswith(tuple(DOC_EXT)) else set())
     if path.startswith("sqlglot/"):
