@@ -1,0 +1,1143 @@
+# Dialect modules (under sqlglot.dialects) whose dialect classes each test made or looked up
+# (Dialect.__init__, get, get_or_raise), from one run of the pinned commit's tests with
+# build/dialect_usage.py.  '@ <test file>', then '<dialects>' and a line of that file's tests
+# ('Class::test' separated by spaces; a test without 'Class::' repeats the previous class).
+@ tests/dialects/test_athena.py
+athena dialect hive presto trino
+TestAthena::test_athena test_create_table test_ctas test_ctas_using_external_function test_ddl test_ddl_quoting test_dml test_dml_quoting test_func_builder test_max_nodes test_parse_partitioned_by_returns_iceberg_transforms test_qualify test_tokenize_dml_once test_tokenize_trino_fallback test_tokenizer_errors
+@ tests/dialects/test_bigquery.py
+bigquery clickhouse databricks dialect drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks trino tsql
+TestBigQuery::test_bigquery
+bigquery clickhouse dialect duckdb exasol hive mysql snowflake spark spark2 tsql
+TestBigQuery::test_week
+bigquery clickhouse dialect duckdb snowflake
+TestBigQuery::test_json_extract
+bigquery clickhouse dialect mysql oracle postgres
+TestBigQuery::test_variance
+bigquery databricks dialect dremio duckdb hive mysql postgres spark spark2
+TestBigQuery::test_bit_aggs
+bigquery databricks dialect duckdb hive presto snowflake spark spark2 trino
+TestBigQuery::test_regexp_extract test_unnest
+bigquery databricks dialect duckdb hive snowflake spark spark2
+TestBigQuery::test_unix_seconds
+bigquery databricks dialect hive spark spark2
+TestBigQuery::test_safe_math_funcs test_unnest_with_offset
+bigquery dialect
+TestBigQuery::test_annotate_timestamps test_approx_quantiles test_approx_qunatiles test_at_time_zone test_avoid_generating_nested_comment test_cast_format_with_parentheses test_convert test_declare test_errors test_gap_fill test_identifier_escapes test_identifier_meta test_information_schema_roundtrip test_isnull_alias test_json_array test_json_lax test_json_object test_ml_functions test_mod test_models test_null_ordering test_null_ordering_in_analytic_functions test_override_normalization_strategy test_pivot_output_column_names test_pseudocolumns test_quoted_identifier_meta test_range_type test_remove_precision_parameterized_types test_set_operations test_string_agg test_user_defined_functions test_with_offset
+bigquery dialect duckdb
+TestBigQuery::test_approx_quantiles_to_duckdb test_array test_array_distinct_fold test_bignumeric test_concat test_inline_constructor test_pivot_date_output_column_names_duckdb test_round test_timestamp_diff_date_overloads test_unix_micros test_unix_millis
+bigquery dialect duckdb postgres presto snowflake
+TestBigQuery::test_json_literal
+bigquery dialect duckdb presto
+TestBigQuery::test_warnings
+bigquery dialect duckdb snowflake
+TestBigQuery::test_format_temporal test_generate_date_array test_json_extract_array
+bigquery dialect hive postgres spark spark2
+TestBigQuery::test_pushdown_cte_column_names
+bigquery dialect materialize postgres redshift risingwave
+TestBigQuery::test_byte_strings
+bigquery dialect presto trino
+TestBigQuery::test_approx_quantile_window test_like_escape
+bigquery dialect snowflake
+TestBigQuery::test_array_agg test_array_concat test_bitwise_and test_bitwise_not test_md5 test_merge test_rename_table test_select_as_struct test_to_hex test_to_json_string
+@ tests/dialects/test_clickhouse.py
+bigquery clickhouse databricks dialect duckdb hive mysql oracle postgres presto snowflake spark spark2 sqlite trino tsql
+TestClickhouse::test_clickhouse
+bigquery clickhouse dialect doris duckdb hive mysql
+TestClickhouse::test_string_split
+bigquery clickhouse dialect duckdb hive presto
+TestClickhouse::test_array_offset
+clickhouse databricks dialect doris duckdb hive mysql presto spark spark2
+TestClickhouse::test_to_start_of
+clickhouse dialect
+TestClickhouse::test_agg_functions test_agg_functions_multiple_suffixes test_aggregate_function_column_with_any_keyword test_array_join test_array_sort test_convert test_create_table_as_alias test_cte test_datetime_funcs test_detach test_drop_on_cluster test_functions test_geom_types test_global_join test_grant test_json_type test_nothing_type test_number_like_identifiers test_parameterization test_refreshable_materialized_view test_revoke test_signed_and_unsigned_types test_sql_security test_table_functions test_ternary test_timestr_to_time test_traverse_scope test_window_functions test_xor_missing_arguments
+clickhouse dialect duckdb
+TestClickhouse::test_ddl test_time_format_escaped_percent
+clickhouse dialect duckdb mysql
+TestClickhouse::test_groupconcat
+clickhouse dialect duckdb postgres presto trino
+TestClickhouse::test_clickhouse_values
+clickhouse dialect duckdb postgres snowflake
+TestClickhouse::test_logical_and_or
+clickhouse dialect mysql postgres
+TestClickhouse::test_safe_div
+clickhouse dialect postgres
+TestClickhouse::test_natural_join
+clickhouse dialect postgres snowflake
+TestClickhouse::test_json_extract test_json_extract_qualified_roundtrip
+@ tests/dialects/test_databricks.py
+clickhouse databricks dialect duckdb hive mysql snowflake spark spark2 teradata tsql
+TestDatabricks::test_databricks
+databricks dialect dremio hive spark spark2
+TestDatabricks::test_to_char_is_numeric_transpile_to_cast
+databricks dialect duckdb hive snowflake spark spark2
+TestDatabricks::test_try_divide
+databricks dialect duckdb hive spark spark2
+TestDatabricks::test_timestamp_without_time_zone
+databricks dialect hive mysql presto snowflake spark spark2 trino
+TestDatabricks::test_timestamp_precision
+databricks dialect hive postgres presto spark spark2 trino
+TestDatabricks::test_unnest_with_ordinality
+databricks dialect hive postgres spark spark2
+TestDatabricks::test_json
+databricks dialect hive postgres spark spark2 tsql
+TestDatabricks::test_datediff
+databricks dialect hive presto spark spark2 trino
+TestDatabricks::test_unnest
+databricks dialect hive snowflake spark spark2
+TestDatabricks::test_iff test_optimize
+databricks dialect hive spark spark2
+TestDatabricks::test_analyze test_declare test_grant test_insert_replace_using test_match_recognize test_optimize_comment_order test_optimize_comments test_optimize_fallback test_optimize_parser_limits test_overlay test_qdcolon test_revoke test_set_variable test_streaming_tables test_udf_environment_property test_udf_handler_property test_udf_parameter_style_property test_without_as
+databricks dialect hive spark spark2 tsql
+TestDatabricks::test_add_date
+@ tests/dialects/test_dax.py
+dax dialect
+TestDAX::test_evaluate
+dax dialect duckdb
+TestDAX::test_filter test_order_by
+@ tests/dialects/test_dialect.py
+athena bigquery clickhouse databricks dax dialect doris dremio drill druid duckdb dune exasol fabric hive materialize mysql oracle postgres presto prql redshift risingwave snowflake solr spark spark2 sqlite starrocks tableau teradata trino tsql
+TestDialect::test_enum
+athena bigquery clickhouse databricks dialect doris dremio drill druid duckdb dune exasol fabric hive materialize mysql oracle postgres presto redshift risingwave snowflake solr spark spark2 sqlite starrocks tableau teradata trino tsql
+TestDialect::test_partition_by_excluding
+athena bigquery clickhouse databricks dialect doris drill duckdb hive materialize mysql oracle postgres presto redshift risingwave snowflake spark spark2 sqlite starrocks tableau teradata trino tsql
+TestDialect::test_operators
+athena bigquery clickhouse databricks dialect drill duckdb hive mysql postgres presto redshift risingwave snowflake spark spark2 starrocks trino
+TestDialect::test_array
+athena bigquery clickhouse dialect drill duckdb hive mysql oracle postgres presto snowflake spark spark2 sqlite trino tsql
+TestDialect::test_alias
+bigquery clickhouse databricks dialect doris dremio drill duckdb exasol hive materialize mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks trino tsql
+TestDialect::test_time
+bigquery clickhouse databricks dialect doris dremio drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks teradata trino tsql
+TestDialect::test_nvl2
+bigquery clickhouse databricks dialect doris drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks tableau teradata trino tsql
+TestDialect::test_array_any
+bigquery clickhouse databricks dialect doris drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite trino tsql
+TestDialect::test_ddl
+bigquery clickhouse databricks dialect doris drill duckdb hive mysql oracle postgres presto spark spark2 sqlite tsql
+TestDialect::test_random
+bigquery clickhouse databricks dialect doris hive mysql oracle postgres presto redshift snowflake spark spark2 trino tsql
+TestDialect::test_translate
+bigquery clickhouse databricks dialect doris hive mysql postgres presto redshift snowflake spark spark2 trino tsql
+TestDialect::test_reverse
+bigquery clickhouse databricks dialect dremio drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks tableau teradata trino tsql
+TestDialect::test_logarithm
+bigquery clickhouse databricks dialect dremio hive mysql oracle postgres presto redshift snowflake spark spark2 trino tsql
+TestDialect::test_soundex
+bigquery clickhouse databricks dialect duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks trino tsql
+TestDialect::test_set_operation_specifiers
+bigquery clickhouse databricks dialect duckdb hive mysql oracle postgres presto snowflake spark spark2 trino
+TestDialect::test_current_catalog
+bigquery clickhouse databricks dialect duckdb hive mysql postgres presto redshift snowflake spark spark2 sqlite trino tsql
+TestDialect::test_nested_ctes
+bigquery clickhouse databricks dialect duckdb hive postgres redshift snowflake spark spark2
+TestDialect::test_integer_hex_strings
+bigquery clickhouse databricks dialect hive mysql oracle postgres redshift snowflake spark spark2 tsql
+TestDialect::test_grouping
+bigquery clickhouse databricks dialect hive mysql postgres redshift snowflake spark spark2 tsql
+TestDialect::test_ascii
+bigquery clickhouse databricks dialect hive oracle snowflake spark spark2
+TestDialect::test_trim
+bigquery clickhouse dialect doris drill duckdb hive materialize mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks tsql
+TestDialect::test_cast
+bigquery clickhouse dialect doris duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks trino tsql
+TestDialect::test_json
+bigquery clickhouse dialect drill
+TestDialect::test_preserve_original_names
+bigquery clickhouse dialect drill duckdb hive presto spark spark2 tsql
+TestDialect::test_set_operators
+bigquery clickhouse dialect duckdb hive oracle postgres redshift snowflake spark spark2 sqlite teradata tsql
+TestDialect::test_limit
+bigquery clickhouse dialect mysql
+TestDialect::test_hash_comments
+bigquery clickhouse dialect postgres redshift
+TestDialect::test_farm_fingerprint
+bigquery databricks dialect duckdb hive mysql oracle postgres presto redshift singlestore spark spark2 sqlite trino tsql
+TestDialect::test_localtime_and_localtimestamp
+bigquery databricks dialect duckdb hive mysql postgres presto redshift snowflake spark spark2 starrocks trino tsql
+TestDialect::test_generate_date_array
+bigquery databricks dialect duckdb hive mysql postgres presto snowflake spark spark2 trino tsql
+TestDialect::test_uuid
+bigquery databricks dialect duckdb hive mysql postgres redshift spark spark2
+TestDialect::test_is_unknown
+bigquery databricks dialect duckdb hive mysql postgres spark spark2 tsql
+TestDialect::test_session_user
+bigquery databricks dialect duckdb hive postgres presto redshift snowflake spark spark2 trino
+TestDialect::test_date_to_unix_date
+bigquery databricks dialect duckdb hive postgres presto spark spark2 trino
+TestDialect::test_regexp_replace
+bigquery databricks dialect duckdb hive postgres spark spark2
+TestDialect::test_format
+bigquery databricks dialect duckdb hive presto spark spark2
+TestDialect::test_order_by
+bigquery databricks dialect duckdb hive snowflake spark spark2
+TestDialect::test_like_quantifiers
+bigquery databricks dialect hive mysql oracle postgres redshift snowflake spark spark2 tsql
+TestDialect::test_regexp_instr
+bigquery databricks dialect hive presto snowflake spark spark2 trino
+TestDialect::test_window_funcs_requiring_order
+bigquery databricks dialect hive spark spark2
+TestDialect::test_unix_time
+bigquery dialect doris duckdb hive mysql oracle postgres presto redshift spark spark2 sqlite starrocks
+TestDialect::test_fetch_first_implicit_count
+bigquery dialect doris mysql sqlite
+TestDialect::test_json_set
+bigquery dialect doris mysql starrocks
+TestDialect::test_date_delta_missing_arguments
+bigquery dialect duckdb hive mysql postgres presto redshift spark spark2
+TestDialect::test_if_null
+bigquery dialect duckdb hive postgres presto snowflake spark spark2 trino
+TestDialect::test_merge
+bigquery dialect duckdb hive postgres snowflake spark spark2
+TestDialect::test_initcap
+bigquery dialect hive mysql oracle tsql
+TestDialect::test_get_or_raise
+bigquery dialect materialize postgres
+TestDialect::test_justify
+bigquery dialect mysql
+TestDialect::test_json_array_append test_json_array_insert
+bigquery dialect mysql postgres presto redshift snowflake sqlite trino tsql
+TestDialect::test_transactions
+bigquery dialect mysql sqlite
+TestDialect::test_json_remove
+bigquery dialect oracle postgres
+TestDialect::test_substring
+bigquery dialect oracle postgres presto teradata tsql
+TestDialect::test_cast_to_user_defined_type
+bigquery dialect postgres
+TestDialect::test_json_strip_nulls
+bigquery dialect postgres presto
+TestDialect::test_initcap_custom_delimiter_warning
+bigquery dialect presto trino
+TestDialect::test_from_to_base32 test_normalize
+bigquery dialect snowflake
+TestDialect::test_compare_dialects
+bigquery dialect snowflake tsql
+TestDialect::test_filter
+clickhouse databricks dialect duckdb hive mysql postgres presto redshift snowflake spark spark2 sqlite trino tsql
+TestDialect::test_escaped_identifier_delimiter
+clickhouse databricks dialect duckdb hive mysql postgres presto snowflake spark spark2 trino
+TestDialect::test_string_functions
+clickhouse databricks dialect duckdb hive oracle postgres redshift snowflake spark spark2
+TestDialect::test_median
+clickhouse dialect dremio duckdb materialize mysql oracle postgres redshift risingwave tsql
+TestDialect::test_between
+clickhouse dialect duckdb mysql oracle postgres snowflake tsql
+TestDialect::test_qualify
+clickhouse dialect duckdb sqlite
+TestDialect::test_underscore_scientific_notation
+clickhouse dialect postgres redshift
+TestDialect::test_heredoc_strings
+databricks dialect doris duckdb hive mysql singlestore snowflake spark spark2 starrocks
+TestDialect::test_json_keys
+databricks dialect drill hive presto spark spark2
+TestDialect::test_cross_join
+databricks dialect duckdb exasol hive oracle postgres presto snowflake spark spark2 teradata
+TestDialect::test_regr_intercept test_regr_r2 test_regr_sxx test_regr_sxy test_regr_syy
+databricks dialect duckdb exasol hive oracle postgres presto snowflake spark spark2 teradata trino
+TestDialect::test_regr_count test_regr_slope
+databricks dialect duckdb hive mysql snowflake spark spark2 starrocks
+TestDialect::test_to_binary
+databricks dialect duckdb hive postgres redshift snowflake spark spark2
+TestDialect::test_values_with_pivot
+databricks dialect hive postgres presto redshift snowflake spark spark2 sqlite tsql
+TestDialect::test_count_if
+databricks dialect hive spark spark2
+TestDialect::test_decimal_literals
+dialect
+TestDialect::test_agg test_create_sequence test_custom_dialect test_interval_with_units_dcolon test_lateral_subquery test_per test_subquery_unwrap test_truncate
+dialect duckdb
+TestDialect::test_compare_dialect_versions
+dialect duckdb exasol hive mysql snowflake spark spark2
+TestDialect::test_week_of_year
+dialect duckdb hive mysql postgres spark spark2 tsql
+TestDialect::test_unsupported_null_ordering
+dialect duckdb hive oracle postgres redshift snowflake spark spark2
+TestDialect::test_decode
+dialect duckdb mysql postgres presto snowflake trino tsql
+TestDialect::test_table_query
+dialect duckdb mysql postgres presto trino
+TestDialect::test_update
+dialect duckdb oracle postgres sqlite
+TestDialect::test_window_exclude
+dialect duckdb postgres presto redshift
+TestDialect::test_reserved_keywords
+dialect duckdb postgres redshift
+TestDialect::test_is_with_dcolon
+dialect hive oracle postgres spark spark2 sqlite
+TestDialect::test_set_operation_precedence
+dialect hive presto
+TestDialect::test_typeddiv
+dialect hive presto spark spark2
+TestDialect::test_multiple_chained_unnest
+dialect hive spark2
+TestDialect::test_spark2_negative_scale_decimal_literals
+dialect mysql oracle postgres sqlite tsql
+TestDialect::test_is_ascii
+dialect mysql postgres
+TestDialect::test_nullsafe_eq test_nullsafe_neq
+dialect mysql postgres snowflake
+TestDialect::test_safediv
+dialect mysql postgres sqlite tsql
+TestDialect::test_current_schema
+dialect oracle tsql
+TestDialect::test_coalesce
+dialect postgres
+TestDialect::test_operator test_parse_at_time_zone
+dialect snowflake
+TestDialect::test_filter_within_group test_patch_dialect_parser
+@ tests/dialects/test_doris.py
+clickhouse dialect doris mysql oracle postgres
+TestDoris::test_doris
+dialect doris duckdb mysql snowflake
+TestDoris::test_rename_table
+dialect doris mysql
+TestDoris::test_analyze test_date_add_sub test_distributed test_identity test_key test_materialized_view_properties test_partition test_regex test_time
+dialect doris mysql postgres
+TestDoris::test_table_alias_conversion
+dialect doris mysql sqlite
+TestDoris::test_match
+@ tests/dialects/test_dremio.py
+dialect dremio
+TestDremio::test_concat_coalesce test_convert_timezone test_current_date_utc test_date_add test_date_part test_date_sub test_datetime_parsing test_datetype test_interval_plural test_limit_only_literals test_multi_arg_distinct_unsupported test_null_ordering test_regexp_split test_repeatstr test_to_char_special test_user_defined_types_unsupported
+dialect dremio duckdb
+TestDremio::test_array_generate_range
+dialect dremio duckdb hive presto spark spark2
+TestDremio::test_regexp_like
+dialect dremio duckdb oracle postgres
+TestDremio::test_time_mapping
+dialect dremio hive
+TestDremio::test_try_cast
+dialect dremio hive presto spark spark2 trino
+TestDremio::test_time_travel
+dialect dremio oracle
+TestDremio::test_type_mappings test_typed_division
+@ tests/dialects/test_drill.py
+dialect drill
+TestDrill::test_analyze
+dialect drill duckdb postgres snowflake
+TestDrill::test_ilike
+dialect drill mysql
+TestDrill::test_drill
+@ tests/dialects/test_druid.py
+athena bigquery clickhouse databricks dax dialect doris dremio drill druid duckdb dune exasol fabric hive materialize mysql oracle postgres presto prql redshift risingwave snowflake solr spark spark2 sqlite starrocks tableau teradata trino tsql
+TestDruid::test_druid
+dialect druid
+TestDruid::test_json_value
+@ tests/dialects/test_duckdb.py
+bigquery clickhouse databricks dialect doris drill duckdb hive mysql oracle postgres presto redshift singlestore snowflake spark spark2 sqlite starrocks teradata trino tsql
+TestDuckDB::test_duckdb
+bigquery clickhouse databricks dialect duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 starrocks trino tsql
+TestDuckDB::test_time
+bigquery dialect duckdb
+TestDuckDB::test_array test_isinf test_isnan test_parameter_token
+bigquery dialect duckdb hive postgres snowflake spark spark2 sqlite
+TestDuckDB::test_format test_format_literal
+bigquery dialect duckdb presto
+TestDuckDB::test_array_index
+bigquery dialect duckdb snowflake
+TestDuckDB::test_set_item
+databricks dialect duckdb hive presto spark spark2 trino
+TestDuckDB::test_array_slice_to_length
+databricks dialect duckdb hive snowflake spark spark2
+TestDuckDB::test_array_insert
+databricks dialect duckdb hive spark spark2
+TestDuckDB::test_spark_array_slice test_spark_array_slice_bounds test_udf
+dialect duckdb
+TestDuckDB::test_analyze test_array_all test_at_sign_to_abs test_attach_detach test_connect_disconnect test_create_sequence test_create_trigger test_create_trigger_command_fallback test_cte_using_key test_digit_separators test_extract_date_parts test_from_first_with_parentheses test_ignore_nulls test_install test_is_precedence test_lambda test_map_struct test_prefix_aliases test_quoted_variables test_reserved_keyword_identifiers test_reset test_sha test_show_tables test_simplified_pivot_unpivot test_timestamps_with_units
+dialect duckdb exasol oracle postgres teradata
+TestDuckDB::test_date_trunc
+dialect duckdb exasol postgres
+TestDuckDB::test_date_trunc_century
+dialect duckdb hive mysql postgres presto snowflake spark spark2 tsql
+TestDuckDB::test_cast
+dialect duckdb hive presto spark spark2
+TestDuckDB::test_encode_decode
+dialect duckdb hive snowflake spark spark2
+TestDuckDB::test_sample
+dialect duckdb hive spark spark2
+TestDuckDB::test_concat_ws test_concat_ws_typed test_concat_ws_unknown_types test_format_uppercase
+dialect duckdb mysql postgres
+TestDuckDB::test_safe_div
+dialect duckdb postgres
+TestDuckDB::test_join_by_type test_nearest_join
+dialect duckdb postgres snowflake sqlite
+TestDuckDB::test_min_max
+dialect duckdb presto trino
+TestDuckDB::test_presto_array_slice
+dialect duckdb snowflake
+TestDuckDB::test_approx_percentile test_array_remove test_array_remove_at test_binary_strposition test_binary_strposition_start test_bitwise_agg test_current_database test_current_schema test_current_schemas test_iceberg_property_no_warning test_map_delete test_map_insert test_map_pick test_map_size test_non_iceberg_property_still_warns test_timestamp_from_parts test_timestamps_with_time_zone_precision test_to_array
+dialect duckdb snowflake tsql
+TestDuckDB::test_rename_table
+@ tests/dialects/test_dune.py
+dialect dune postgres presto trino
+TestDune::test_dune
+@ tests/dialects/test_exasol.py
+bigquery clickhouse databricks dialect drill duckdb exasol hive mysql oracle postgres presto redshift snowflake spark spark2 tsql
+TestExasol::test_stringFunctions
+bigquery clickhouse databricks dialect duckdb exasol hive postgres presto redshift snowflake spark spark2 sqlite trino
+TestExasol::test_scalar
+bigquery databricks dialect duckdb exasol hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite tsql
+TestExasol::test_datetime_functions
+bigquery dialect duckdb exasol hive postgres presto spark spark2
+TestExasol::test_bits
+databricks dialect duckdb exasol hive postgres presto redshift spark spark2
+TestExasol::test_aggregateFunctions
+databricks dialect exasol hive spark spark2
+TestExasol::test_group_by_all test_local_prefix_for_alias
+dialect duckdb exasol mysql oracle postgres teradata tsql
+TestExasol::test_number_functions
+dialect exasol
+TestExasol::test_exasol_keywords test_odbc_date_literals test_qualify_unscoped_star
+dialect exasol hive presto
+TestExasol::test_regexp_like
+dialect exasol mysql
+TestExasol::test_exasol test_group_by_alias_local test_show_databases test_show_tables
+dialect exasol mysql snowflake
+TestExasol::test_use_to_open_schema
+dialect exasol mysql teradata
+TestExasol::test_mod
+dialect exasol presto trino
+TestExasol::test_json
+dialect exasol tsql
+TestExasol::test_type_mappings
+@ tests/dialects/test_fabric.py
+dialect fabric postgres tsql
+TestFabric::test_varchar_precision_inference
+dialect fabric tsql
+TestFabric::test_lossy_type_mappings_keep_precision test_precision_capping test_timestamptz_with_at_time_zone test_timestamptz_without_at_time_zone test_type_mappings test_unix_to_time
+@ tests/dialects/test_hive.py
+bigquery clickhouse databricks dialect doris duckdb hive mysql postgres presto snowflake spark spark2 trino
+TestHive::test_hive
+bigquery databricks dialect duckdb hive presto spark spark2
+TestHive::test_ddl
+bigquery dialect duckdb hive postgres presto redshift snowflake spark spark2 tsql
+TestHive::test_time
+databricks dialect duckdb hive presto spark spark2
+TestHive::test_percentile
+databricks dialect duckdb hive spark spark2 sqlite
+TestHive::test_joins_without_on
+databricks dialect hive spark spark2
+TestHive::test_multitable_inserts
+dialect drill duckdb hive presto spark spark2
+TestHive::test_quotes
+dialect duckdb exasol hive presto spark spark2
+TestHive::test_regex
+dialect duckdb hive presto spark spark2
+TestHive::test_bits test_cast test_order_by
+dialect duckdb hive presto spark spark2 trino
+TestHive::test_lateral_view
+dialect hive
+TestHive::test_create_function_using test_data_type test_escapes test_interval
+dialect hive oracle snowflake spark spark2 tsql
+TestHive::test_add_columns
+dialect hive postgres spark spark2
+TestHive::test_is_precedence
+@ tests/dialects/test_materialize.py
+dialect duckdb materialize postgres
+TestMaterialize::test_materialize
+dialect hive materialize postgres spark spark2
+TestMaterialize::test_array_length
+@ tests/dialects/test_mysql.py
+bigquery clickhouse databricks dialect drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks tableau teradata trino tsql
+TestMySQL::test_hexadecimal_literal
+bigquery clickhouse databricks dialect drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks teradata trino tsql
+TestMySQL::test_safe_div
+bigquery clickhouse databricks dialect drill hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite tableau teradata trino tsql
+TestMySQL::test_bits_literal
+bigquery clickhouse databricks dialect duckdb hive mysql oracle postgres presto snowflake spark spark2 sqlite starrocks teradata trino tsql
+TestMySQL::test_safe_mod
+bigquery clickhouse dialect duckdb hive mysql oracle postgres presto redshift sqlite tsql
+TestMySQL::test_canonical_functions
+bigquery databricks dialect duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks trino tsql
+TestMySQL::test_mysql
+bigquery dialect exasol mysql postgres presto redshift
+TestMySQL::test_mysql_time
+bigquery dialect hive mysql presto spark spark2 tsql
+TestMySQL::test_if
+bigquery dialect hive mysql spark spark2
+TestMySQL::test_subday_datesub
+bigquery dialect mysql
+TestMySQL::test_integer_division
+databricks dialect hive mysql postgres snowflake spark spark2
+TestMySQL::test_timestamp_trunc
+dialect doris duckdb mysql singlestore starrocks
+TestMySQL::test_statistical_aggregates
+dialect duckdb exasol mysql snowflake
+TestMySQL::test_date_format
+dialect duckdb hive mysql postgres spark spark2 sqlite
+TestMySQL::test_ddl
+dialect duckdb mysql
+TestMySQL::test_number_format test_timestampadd test_timestampdiff
+dialect duckdb mysql postgres presto trino
+TestMySQL::test_null_ordering_simulation_resolves_ordered_against_projection
+dialect hive mysql spark spark2
+TestMySQL::test_escape test_types
+dialect mysql
+TestMySQL::test_alter_drop_column test_alter_mixed_actions test_alter_table_auto_increment test_analyze test_at_time_zone test_column_key_constraint test_conditionless_join_precedence test_convert test_create_trigger test_explain test_grant test_identity test_insert_value test_introducers test_invisible_column test_json_object test_json_value test_mod test_monthname test_mysql_time_python311 test_revoke test_set_variable test_show_columns test_show_create_qualified test_show_db_like_or_where_sql test_show_engine test_show_errors test_show_events test_show_grants test_show_index test_show_like_or_where test_show_name test_show_processlist test_show_profile test_show_replica_status test_show_simple test_show_tables test_string_literals test_table_query_identifier test_unique_key_index_options test_utc_time test_valid_interval_units test_weight_string
+dialect mysql oracle postgres snowflake
+TestMySQL::test_ignore_respect_nulls
+dialect mysql oracle postgres snowflake tsql
+TestMySQL::test_numeric_trunc
+dialect mysql postgres
+TestMySQL::test_match_against
+dialect mysql postgres redshift snowflake sqlite
+TestMySQL::test_is_null
+dialect mysql snowflake
+TestMySQL::test_bitwise_precedence test_xor_precedence
+dialect mysql sqlite
+TestMySQL::test_not_precedence
+@ tests/dialects/test_oracle.py
+bigquery clickhouse databricks dialect doris drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 starrocks tableau teradata tsql
+TestOracle::test_oracle
+bigquery clickhouse dialect duckdb exasol hive mysql oracle postgres presto snowflake spark spark2 teradata tsql
+TestOracle::test_trunc
+bigquery databricks dialect hive oracle spark spark2
+TestOracle::test_regexp_replace
+bigquery dialect hive oracle spark spark2
+TestOracle::test_flashback
+clickhouse dialect duckdb oracle postgres
+TestOracle::test_variance
+clickhouse dialect oracle
+TestOracle::test_datetrunc
+dialect duckdb exasol oracle postgres teradata
+TestOracle::test_trunc_century
+dialect duckdb oracle snowflake
+TestOracle::test_add_months
+dialect oracle
+TestOracle::test_alternative_quoting test_analyze test_chr test_connect_by test_create_trigger test_full_procedure test_grant test_hints test_insert_partition test_join_marker test_json_functions test_json_table test_listagg test_match_recognize test_merge test_merge_builder_alias test_national_alternative_quoting test_nonreserved_keywords_as_identifiers test_partition_selection test_pivot_syntax_restrictions test_prior test_pseudocolumns test_query_restrictions test_recursive_cte test_revoke test_trunc_type_inference test_unrecognized_query_restriction test_utc_time test_xml_table
+dialect oracle postgres
+TestOracle::test_create_table_physical_properties test_create_table_storage test_create_table_tablespace
+dialect oracle snowflake
+TestOracle::test_multitable_inserts
+@ tests/dialects/test_pipe_syntax.py
+bigquery dialect
+TestPipeSyntax::test_aggregate test_set_operators
+dialect
+TestPipeSyntax::test_as test_distinct test_extend test_join test_limit test_order_by test_pivot_unpivot test_select test_tablesample
+@ tests/dialects/test_postgres.py
+athena bigquery clickhouse dialect duckdb hive mysql postgres presto redshift snowflake spark spark2 sqlite trino
+TestPostgres::test_is_precedence
+athena bigquery dialect duckdb hive postgres presto trino
+TestPostgres::test_unicode_string
+bigquery clickhouse databricks dialect doris duckdb hive mysql postgres presto redshift singlestore snowflake spark spark2 sqlite starrocks trino tsql
+TestPostgres::test_postgres
+bigquery clickhouse databricks dialect drill duckdb hive postgres presto spark spark2 teradata
+TestPostgres::test_array_length
+bigquery dialect duckdb hive postgres
+TestPostgres::test_round
+bigquery dialect duckdb hive postgres presto
+TestPostgres::test_array_offset
+bigquery dialect duckdb postgres snowflake
+TestPostgres::test_star_except
+clickhouse dialect duckdb postgres
+TestPostgres::test_json_extract
+clickhouse dialect duckdb postgres presto
+TestPostgres::test_string_concat
+databricks dialect duckdb hive postgres presto spark spark2 trino
+TestPostgres::test_generate_series_decimal_steps test_generate_series_steps
+dialect duckdb hive postgres presto spark spark2
+TestPostgres::test_unnest
+dialect duckdb hive postgres presto spark spark2 tsql
+TestPostgres::test_ddl
+dialect duckdb postgres
+TestPostgres::test_corr test_datetime_arithmetic test_interval_positive_fraction test_table_query
+dialect oracle postgres
+TestPostgres::test_regexp_replace_omitted_replacement
+dialect postgres
+TestPostgres::test_alter_drop_column test_alter_mixed_actions test_analyze test_bool_or test_called_on_null_input_malformed test_convert test_create_tablespace test_datatype test_date_interval_timestamp test_function_parameter_mode_without_copy test_grant test_interval_span test_json_value test_locks test_postgis_distance_3d test_postgres_create_trigger test_preserve_is_not_null test_recursive_cte test_regexp_binary test_revoke test_rows_from test_udt test_variance test_xmlelement
+dialect postgres presto trino
+TestPostgres::test_begin_transaction test_unnest_json_array
+dialect postgres tsql
+TestPostgres::test_extract_date_parts
+@ tests/dialects/test_presto.py
+athena dialect duckdb hive presto trino
+TestPresto::test_date_trunc_preserves_input_type
+bigquery clickhouse databricks dialect doris drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite teradata trino tsql
+TestPresto::test_presto
+bigquery clickhouse dialect duckdb hive mysql postgres presto redshift spark spark2 trino
+TestPresto::test_time
+bigquery databricks dialect duckdb hive oracle postgres presto redshift snowflake spark spark2 trino tsql
+TestPresto::test_cast
+bigquery dialect doris mysql presto trino
+TestPresto::test_interval_plural_to_singular
+bigquery dialect duckdb hive oracle presto spark spark2 tableau teradata trino
+TestPresto::test_regex
+bigquery dialect duckdb hive presto snowflake spark spark2
+TestPresto::test_replace
+bigquery dialect presto
+TestPresto::test_approx_percentile test_to_char
+dialect duckdb hive presto spark spark2
+TestPresto::test_ddl test_encode_decode test_quotes
+dialect hive mysql presto spark spark2 starrocks
+TestPresto::test_signum
+dialect hive oracle presto snowflake spark spark2
+TestPresto::test_unicode_string
+dialect hive presto spark spark2
+TestPresto::test_hex_unhex test_json test_unnest
+dialect oracle presto trino
+TestPresto::test_bit_aggs
+dialect presto
+TestPresto::test_analyze test_initcap test_match_recognize
+dialect presto snowflake trino
+TestPresto::test_json_vs_row_extract
+dialect presto trino
+TestPresto::test_temporal_precision
+@ tests/dialects/test_prql.py
+dialect prql
+TestPRQL::test_prql
+@ tests/dialects/test_redshift.py
+bigquery databricks dialect drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks tableau teradata trino tsql
+TestRedshift::test_redshift
+bigquery dialect postgres redshift
+TestRedshift::test_star_except
+databricks dialect duckdb hive postgres redshift snowflake spark spark2 tsql
+TestRedshift::test_identity
+dialect duckdb postgres redshift
+TestRedshift::test_regexp_extract
+dialect hive postgres redshift spark spark2
+TestRedshift::test_alter_table
+dialect mysql postgres presto redshift
+TestRedshift::test_values
+dialect postgres presto redshift trino
+TestRedshift::test_create_table_like
+dialect postgres redshift
+TestRedshift::test_analyze test_cast test_column_unnesting test_date_delta_unit_expressions test_fetch_to_limit test_grant test_join_markers test_no_schema_binding test_revoke test_sha2_argument_types test_sha2_cte_type test_sha2_type test_time test_to_timestamp
+dialect postgres redshift tsql
+TestRedshift::test_varchar_max
+@ tests/dialects/test_risingwave.py
+dialect postgres risingwave
+TestRisingWave::test_datatypes test_risingwave
+@ tests/dialects/test_singlestore.py
+bigquery clickhouse dialect duckdb mysql postgres singlestore snowflake tsql
+TestSingleStore::test_types
+bigquery dialect duckdb hive mysql postgres redshift singlestore spark2
+TestSingleStore::test_time_functions
+bigquery dialect mysql postgres redshift singlestore
+TestSingleStore::test_string_functions
+dialect duckdb hive mysql singlestore
+TestSingleStore::test_unix_functions
+dialect mysql oracle singlestore
+TestSingleStore::test_json
+dialect mysql postgres singlestore
+TestSingleStore::test_percentile_null_ordering
+dialect mysql presto singlestore
+TestSingleStore::test_unicodestring_sql
+dialect mysql singlestore
+TestSingleStore::test_alter test_byte_strings test_cast test_collate_sql test_column_with_tablename test_constraints test_date_parts_functions test_dcolonqmark test_is_ascii test_json_extract test_logical test_match_against test_math_functions test_national_strings test_reduce_functions test_restricted_keywords test_show test_singlestore test_time_formatting test_truncate
+dialect mysql singlestore snowflake
+TestSingleStore::test_vector
+@ tests/dialects/test_snowflake.py
+bigquery clickhouse databricks dialect drill duckdb hive mysql oracle postgres presto redshift singlestore snowflake spark spark2 sqlite starrocks teradata trino tsql
+TestSnowflake::test_snowflake
+bigquery clickhouse databricks dialect duckdb hive presto snowflake spark spark2
+TestSnowflake::test_describe
+bigquery clickhouse dialect duckdb hive mysql oracle postgres presto snowflake spark spark2 tsql
+TestSnowflake::test_trunc
+bigquery databricks dialect duckdb hive presto snowflake spark spark2
+TestSnowflake::test_regexp_functions
+bigquery dialect duckdb hive postgres snowflake spark spark2
+TestSnowflake::test_regexp_replace
+bigquery dialect duckdb hive presto snowflake spark spark2 tsql
+TestSnowflake::test_semi_structured_types
+bigquery dialect duckdb hive snowflake spark spark2
+TestSnowflake::test_replace
+bigquery dialect duckdb mysql oracle postgres snowflake teradata
+TestSnowflake::test_ddl
+bigquery dialect duckdb postgres presto snowflake
+TestSnowflake::test_timestamps
+bigquery dialect snowflake
+TestSnowflake::test_null_treatment test_user_defined_functions
+clickhouse dialect duckdb postgres snowflake
+TestSnowflake::test_asof_join
+databricks dialect duckdb hive postgres redshift snowflake spark spark2
+TestSnowflake::test_get_bit
+databricks dialect duckdb hive postgres snowflake spark spark2
+TestSnowflake::test_sample
+databricks dialect hive snowflake spark spark2
+TestSnowflake::test_merge_all_by_name
+dialect duckdb hive snowflake spark spark2
+TestSnowflake::test_values
+dialect duckdb mysql snowflake starrocks
+TestSnowflake::test_array_flatten
+dialect duckdb postgres presto snowflake trino
+TestSnowflake::test_listagg
+dialect duckdb postgres snowflake
+TestSnowflake::test_corr test_querying_semi_structured_data
+dialect duckdb snowflake
+TestSnowflake::test_alter_iceberg_table test_array_except test_array_position test_array_slice test_base64_alphabet test_ceil test_charindex test_create_sequence test_date_trunc_preserves_date test_decfloat test_float_interval test_floor test_generator test_get_extract test_max_by_min_by test_next_day test_previous_day test_reverse test_round test_seq_functions test_sha1 test_space test_time_format_case test_to_binary test_to_date test_transpile_bitwise_ops test_try_parse_json test_type_sensitive_bitshift_transpilation
+dialect duckdb snowflake tsql
+TestSnowflake::test_set_operation_top
+dialect hive snowflake
+TestSnowflake::test_try_cast
+dialect hive snowflake spark spark2
+TestSnowflake::test_subday_dateadd
+dialect oracle postgres redshift snowflake
+TestSnowflake::test_join_marker
+dialect oracle snowflake
+TestSnowflake::test_minus
+dialect presto snowflake trino
+TestSnowflake::test_offset_without_limit
+dialect snowflake
+TestSnowflake::test_alter_session test_alter_set_unset test_bit_aggs test_bitmap_or_agg test_chained_pivots test_copy test_create_function_ignore_grants test_create_view_change_tracking test_create_view_copy_grants test_create_view_ignore_grants test_create_view_row_access_policy test_directed_joins test_drop_iceberg_table test_encryption_functions test_flatten test_from_changes test_get_from_stage test_grant test_historical_data test_list_stage test_list_stage_alias test_list_stage_identifiers test_list_stage_invalid_pattern test_list_stage_pattern test_match_recognize test_md5_functions test_model_attribute test_parameter test_parse_like_any test_pivot_output_column_names test_put_to_stage test_quoting test_rely_options test_revoke test_rollback_as_identifier test_semantic_view test_set_item_kind_attribute test_show_columns test_show_databases test_show_file_formats test_show_functions test_show_imported_keys test_show_objects test_show_primary_keys test_show_procedures test_show_schemas test_show_sequences test_show_stages test_show_tables test_show_unique_keys test_show_users test_show_views test_show_warehouses test_staged_files test_storage_integration test_stored_procedures test_swap test_table_function test_undrop test_unreserved_keywords_as_identifiers test_update_statement test_window_function_arg
+@ tests/dialects/test_solr.py
+dialect solr
+TestSolr::test_solr
+@ tests/dialects/test_spark.py
+athena bigquery clickhouse databricks dax dialect doris dremio drill druid duckdb dune exasol fabric hive materialize mysql oracle postgres presto prql redshift risingwave snowflake solr spark spark2 sqlite starrocks tableau teradata trino tsql
+TestSpark::test_strip_modifiers
+athena bigquery databricks dialect duckdb hive materialize postgres presto snowflake spark spark2 trino
+TestSpark::test_ddl
+athena dialect duckdb hive presto spark spark2 trino
+TestSpark::test_lateral_view_outer
+bigquery clickhouse databricks dialect doris duckdb hive mysql postgres presto redshift snowflake spark spark2 trino
+TestSpark::test_spark
+bigquery dialect duckdb hive presto spark spark2
+TestSpark::test_explode_projection_to_unnest
+bigquery dialect hive spark spark2
+TestSpark::test_hint
+clickhouse dialect hive presto spark spark2
+TestSpark::test_array_slice
+databricks dialect duckdb hive presto snowflake spark spark2
+TestSpark::test_to_date
+databricks dialect duckdb hive snowflake spark spark2
+TestSpark::test_try_divide
+databricks dialect hive oracle spark spark2 teradata
+TestSpark::test_trunc_aliases
+databricks dialect hive snowflake spark spark2
+TestSpark::test_array_insert
+databricks dialect hive spark spark2
+TestSpark::test_approx_percentile test_binary_string test_create_table_options test_insert_cte test_minus test_named_struct test_set_variable test_string
+dialect hive presto spark spark2
+TestSpark::test_transpile_annotated_exploded_column
+dialect hive presto spark spark2 trino
+TestSpark::test_explode_map test_grouping_sets_as_group_by_element
+dialect hive spark spark2
+TestSpark::test_analyze test_bool_or test_current_user test_declare test_multitable_inserts test_schema_binding_options test_string_escapes test_transform_query test_trunc_unknown_format
+@ tests/dialects/test_sqlite.py
+bigquery clickhouse dialect duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite trino tsql
+TestSQLite::test_sqlite
+bigquery dialect duckdb snowflake sqlite
+TestSQLite::test_safe_div
+dialect duckdb mysql postgres sqlite
+TestSQLite::test_group_concat_distinct_separator
+dialect duckdb mysql sqlite
+TestSQLite::test_hexadecimal_literal test_length_null_terminated_text
+dialect duckdb postgres snowflake sqlite
+TestSQLite::test_round
+dialect duckdb postgres sqlite
+TestSQLite::test_floating_point_types test_iif_anonymous_marker test_is_operator_null_safe_comparison test_is_precedence test_json_cast test_variadic_iif
+dialect duckdb sqlite
+TestSQLite::test_group_concat_null_separator test_random test_strftime test_strftime_fractional_seconds test_table_options test_unicode
+dialect hive mysql spark spark2 sqlite
+TestSQLite::test_json_arrow_precedence
+dialect mysql postgres snowflake sqlite
+TestSQLite::test_unsupported_auto_increment
+dialect mysql postgres sqlite
+TestSQLite::test_ddl
+dialect mysql sqlite
+TestSQLite::test_date_add_sub_day_units_retain_time test_subquery_modifier_conflicts test_week_date_arithmetic
+dialect postgres sqlite
+TestSQLite::test_subquery_modifiers
+dialect snowflake sqlite tsql
+TestSQLite::test_datediff
+dialect sqlite
+TestSQLite::test_analyze test_cast test_create_trigger test_digit_separators test_identity_columns test_longvarchar_dtype test_pragma_quoted_names test_pragma_quoted_schemas test_quoted_variadic_iif test_reindex test_trunc test_unary_plus test_unary_plus_preserves_affinity test_variadic_iif_execution test_warnings test_window_null_treatment
+dialect sqlite tsql
+TestSQLite::test_generated_columns
+@ tests/dialects/test_starrocks.py
+bigquery dialect duckdb mysql starrocks
+TestStarrocks::test_ignore_respect_nulls
+clickhouse dialect hive mysql presto spark spark2 starrocks
+TestStarrocks::test_min_max_by
+databricks dialect hive mysql postgres spark spark2 starrocks
+TestStarrocks::test_unnest
+dialect duckdb hive mysql postgres spark spark2 starrocks
+TestStarrocks::test_ddl
+dialect duckdb hive mysql presto spark spark2 starrocks
+TestStarrocks::test_map
+dialect duckdb mysql postgres starrocks
+TestStarrocks::test_array_contains_all
+dialect duckdb mysql snowflake starrocks
+TestStarrocks::test_time_slice
+dialect duckdb mysql starrocks
+TestStarrocks::test_datediff test_map_literal test_time_slice_origin_roundtrip
+dialect mysql postgres starrocks
+TestStarrocks::test_refresh_unsupported_options
+dialect mysql starrocks
+TestStarrocks::test_aggregate_key test_analyze test_between test_command_statements test_comments test_date_add_sub test_distinct_on test_generate_date_array test_identity test_partition test_pivot test_refresh_invalid_mode test_regex test_starrocks test_table_function test_time test_trim
+@ tests/dialects/test_tableau.py
+dialect hive presto tableau
+TestTableau::test_tableau
+@ tests/dialects/test_teradata.py
+bigquery clickhouse databricks dialect drill duckdb hive mysql oracle postgres presto redshift snowflake spark spark2 sqlite starrocks tableau teradata trino tsql
+TestTeradata::test_create
+bigquery databricks dialect hive mysql snowflake spark spark2 teradata
+TestTeradata::test_cast
+bigquery dialect duckdb exasol hive mysql oracle postgres snowflake spark spark2 teradata tsql
+TestTeradata::test_trunc
+bigquery dialect snowflake sqlite teradata
+TestTeradata::test_time
+databricks dialect duckdb hive snowflake spark spark2 teradata
+TestTeradata::test_teradata
+databricks dialect hive postgres spark spark2 teradata
+TestTeradata::test_characters test_curdate
+databricks dialect hive postgres spark spark2 teradata tsql
+TestTeradata::test_byteint
+dax dialect duckdb dune hive presto snowflake sqlite teradata trino
+TestTeradata::test_hex_character_string
+dialect duckdb snowflake teradata
+TestTeradata::test_locking test_window_aggregate_default_frame
+dialect fabric teradata tsql
+TestTeradata::test_hex_character_trunc
+dialect hive teradata
+TestTeradata::test_dayofweek
+dialect mysql teradata
+TestTeradata::test_mod test_power test_update
+dialect postgres redshift teradata
+TestTeradata::test_datatype
+dialect postgres teradata
+TestTeradata::test_named test_named_as_precedence test_title
+dialect teradata
+TestTeradata::test_abbrev test_current_time test_curtime test_execute test_execute_command_fallback test_execute_parse_errors test_execute_return_status test_format_override test_insert test_named_attribute_order test_query_band test_statistics test_translate
+@ tests/dialects/test_trino.py
+bigquery databricks dialect duckdb hive presto snowflake spark spark2 trino
+TestTrino::test_trino
+bigquery dialect presto trino
+TestTrino::test_bigquery_functions test_decimal_beyond_numeric_range test_format_datetime
+dialect hive presto spark spark2 trino
+TestTrino::test_concat_ws test_concat_ws_typed test_concat_ws_unknown_types
+dialect presto trino
+TestTrino::test_analyze test_approx_percentile test_array_first test_ddl test_fetch test_inline_udf test_inline_udf_begin_end test_inline_udf_case test_inline_udf_if test_inline_udf_loop_repeat test_inline_udf_while test_json_value test_listagg test_table_query_function test_temporal_literal_precision test_trim
+@ tests/dialects/test_tsql.py
+bigquery clickhouse dialect duckdb hive mysql postgres presto redshift snowflake spark spark2 tsql
+TestTSQL::test_eomonth
+bigquery databricks dialect duckdb hive mysql oracle postgres snowflake spark spark2 sqlite tsql
+TestTSQL::test_tsql
+bigquery databricks dialect hive spark spark2 tsql
+TestTSQL::test_add_date
+bigquery dialect duckdb hive presto spark spark2 sqlite trino tsql
+TestTSQL::test_json
+bigquery dialect duckdb tsql
+TestTSQL::test_datetrunc
+clickhouse databricks dialect duckdb hive spark spark2 tsql
+TestTSQL::test_date_diff
+clickhouse dialect duckdb postgres sqlite teradata tsql
+TestTSQL::test_set_operation_branch_limits
+clickhouse dialect tsql
+TestTSQL::test_set_operation_pagination
+databricks dialect duckdb hive mysql postgres presto singlestore spark spark2 starrocks tsql
+TestTSQL::test_ddl
+databricks dialect duckdb hive spark spark2 tsql
+TestTSQL::test_identifier_prefixes test_set
+databricks dialect hive spark spark2 tsql
+TestTSQL::test_option test_parsename
+dialect duckdb hive mysql tsql
+TestTSQL::test_types
+dialect duckdb hive spark spark2 tsql
+TestTSQL::test_count test_types_ints
+dialect duckdb mysql postgres presto snowflake trino tsql
+TestTSQL::test_set_operation_order
+dialect duckdb postgres presto trino tsql
+TestTSQL::test_null_ordering_simulation_resolves_ordered_against_projection
+dialect duckdb postgres tsql
+TestTSQL::test_for_modifiers
+dialect duckdb tsql
+TestTSQL::test_qualify_derived_table_outputs test_unpivot_value_column_comes_first
+dialect hive mysql spark spark2 tsql
+TestTSQL::test_convert test_format
+dialect hive postgres spark spark2 tsql
+TestTSQL::test_datepart test_lateral_subquery test_lateral_table_valued_function
+dialect hive snowflake spark spark2 tsql
+TestTSQL::test_types_date
+dialect hive spark spark2 teradata tsql
+TestTSQL::test_top
+dialect hive spark spark2 tsql
+TestTSQL::test_bare_table_hints test_charindex test_current_user test_datefromparts test_datename test_hints test_isnull test_len test_replicate test_string test_types_bin test_types_decimals test_types_string
+dialect mysql oracle postgres tsql
+TestTSQL::test_numeric_trunc
+dialect oracle tsql
+TestTSQL::test_next_value_for
+dialect tsql
+TestTSQL::test_boolean_cast_predicates test_boolean_cast_values test_collation_parse test_commit test_create_trigger test_day_month_year test_declare test_for_xml test_grant test_odbc_date_literals test_openjson test_procedure_keywords test_procedures test_revoke test_rollback test_scope_resolution_op test_set_operation_trailing_clauses test_set_operation_unordered_pagination test_system_time test_temporal_table test_transaction test_udf
+@ tests/test_anonymize.py
+athena dialect hive presto trino
+TestAnonymize::test_athena_known_function_kept
+dialect
+TestAnonymize::test_comment_bodies_fully_blanked test_comments_blanked_in_reserialization test_comments_redacted test_comments_without_tokens test_consistent_within_call test_empty_input test_functions_anonymized test_hint_does_not_desync_following_comments test_huge_numeric_literal_no_crash test_identifiers_rewritten test_identifiers_with_spaces_stay_distinct test_known_function_comment_still_blanked test_number_and_string_same_text_stay_distinct test_numbers_keep_their_shape test_quoted_identifier_shares_alias test_reserved_keywords_not_rewritten test_source_spelling_preserved test_strings_rewritten test_tokenize_error_tail_blanked test_tpcds_query_reserialized test_whitespace
+dialect hive oracle spark spark2
+TestAnonymize::test_hints_anonymized
+dialect mysql
+TestAnonymize::test_render_without_dialect_still_redacts
+dialect mysql oracle postgres snowflake tsql
+TestAnonymize::test_quotes_preserved
+dialect mysql postgres
+TestAnonymize::test_tokenize_error_keeps_delimiter
+dialect mysql snowflake
+TestAnonymize::test_render
+dialect snowflake
+TestAnonymize::test_known_function_kept_when_passing_tokens test_string_family_forms_anonymized
+@ tests/test_build.py
+bigquery clickhouse dialect hive mysql postgres spark spark2
+TestBuild::test_build
+@ tests/test_dialect_entry_points.py
+dialect
+TestDialectEntryPoints::test_entry_point_plugin_discovery_legacy_api test_entry_point_plugin_discovery_modern_api
+@ tests/test_diff.py
+dialect
+TestDiff::test_comments_do_not_affect_diff test_cte test_edit_script_is_deterministic test_identifier test_join test_lambda test_node_position_changed test_non_expression_leaf_delta test_none_args_are_not_treated_as_leaves test_pre_matchings test_simple test_udf
+dialect oracle
+TestDiff::test_dialect_aware_diff test_window_functions
+@ tests/test_executor.py
+bigquery dialect duckdb mysql
+TestExecutor::test_integer_division_truncates_towards_zero
+bigquery dialect duckdb snowflake
+TestExecutor::test_nested_values
+dialect
+TestExecutor::test_agg_order test_aggregate_without_group_by test_case_sensitivity test_correlated_count test_correlated_exists_over_a_nested_scalar_aggregate test_correlated_exists_over_scalar_aggregate test_correlated_not_in_is_not_unnested test_correlated_not_in_not_join_key_is_not_unnested test_count_distinct test_count_distinct_multiple_columns test_distinct_group_by_order_by_aggregate test_distinct_order_by test_distinct_order_by_aliased_projection test_distinct_order_by_column_from_different_table test_distinct_order_by_column_outside_select_list test_distinct_order_by_computed_expression test_distinct_order_by_unaliased_projection test_dpipe test_execute_callable test_execute_catalog_db_table test_execute_subqueries test_execute_tables test_execute_tpch test_group_by test_ilike_semantics test_in_any_subquery_without_a_from test_length test_like_semantics test_negated_like test_nested_table_reference test_offset_no_order_by test_offset_order_by test_operators_apply_to_a_whole_case_expression test_outer_joins_preserve_unmatched_rows test_py_dialect test_set_operation_order_by test_set_operations test_sql_boolean_logic_preserves_short_circuiting test_sql_boolean_logic_with_numpy_scalars test_sql_three_valued_boolean_logic test_static_queries test_subqueries test_subquery_cardinality test_subquery_execution_does_not_mutate_the_plan test_subquery_memoization test_table_depth_mismatch test_tables
+dialect duckdb
+TestExecutor::test_array_slice test_execute_tpcds test_optimized_tpch
+dialect duckdb mysql postgres
+TestExecutor::test_null_ordering_honors_nulls_first_and_dialect_defaults
+dialect hive
+TestExecutor::test_first
+dialect mysql
+TestExecutor::test_integer_division_floating_point
+dialect oracle
+TestExecutor::test_scalar_functions
+dialect postgres presto trino
+TestExecutor::test_dpipe_source_dialect_coercion
+dialect postgres sqlite
+TestExecutor::test_typed_division test_typed_division_of_null_is_null
+@ tests/test_expressions.py
+bigquery clickhouse dialect duckdb postgres
+TestExprs::test_replace_tables_keeps_function_arguments
+bigquery databricks dialect hive snowflake spark spark2
+TestExprs::test_table_name
+bigquery dialect
+TestExprs::test_replace_tables
+bigquery dialect duckdb hive mysql sqlite
+TestExprs::test_function_building
+bigquery dialect duckdb hive postgres redshift spark spark2
+TestExprs::test_data_type_builder
+bigquery dialect hive spark spark2
+TestExprs::test_functions
+bigquery dialect snowflake tsql
+TestExprs::test_ref_type_builder
+clickhouse dialect
+TestExprs::test_is_type test_replace_tables_function_copy
+dialect
+TestExprs::test_alias test_alias_column_names test_alias_or_name test_arg_deletion test_arg_key test_assert_is test_column test_comment_alias test_convert_datetime_time test_convert_python39 test_ctes test_depth test_eq_on_same_instance_short_circuits test_find test_find_all test_find_ancestor test_function_normalizer test_hash test_hash_invalidated_on_append test_hash_large_ast test_is_int test_is_star test_iter test_parse_identifier test_rename_table test_replace test_replace_placeholders test_root test_selects test_set_meta test_set_metadata test_str_position_order test_table test_text test_to_interval test_to_py test_to_s test_to_table test_transform_multiple_children test_transform_no_infinite_recursion test_transform_node_removal test_transform_with_parent_mutation test_union test_unit test_unnest test_values test_var_len_args_spill_into_var_len_arg_key test_walk
+dialect duckdb
+TestExprs::test_named_selects test_named_selects_long_by_name_chain test_named_selects_set_operations test_replace_tables_builtin_parent
+dialect hive
+TestExprs::test_eq test_sql
+dialect hive postgres
+TestExprs::test_cast
+dialect hive spark spark2
+TestExprs::test_convert test_expand test_expand_with_lazy_source_provider test_to_column
+dialect mysql postgres singlestore
+TestExprs::test_eq_case_sensitive_text
+dialect presto
+TestExprs::test_transform_simple test_transform_with_arguments
+dialect snowflake
+TestExprs::test_alias_with_placeholder test_column_expression test_to_dot
+@ tests/test_generator.py
+athena bigquery clickhouse databricks dax dialect doris dremio drill druid duckdb dune exasol fabric hive materialize mysql oracle postgres presto prql redshift risingwave snowflake solr spark spark2 sqlite starrocks tableau teradata trino tsql
+TestGenerator::test_generator_memory
+athena dialect hive postgres presto trino
+TestGenerator::test_unsupported_property_is_dropped
+bigquery dialect mysql postgres starrocks
+TestGenerator::test_time_slice_origin
+dax dialect duckdb exasol fabric sqlite tableau tsql
+TestGenerator::test_unsupported_slice
+dialect
+TestGenerator::test_generate_nested_binary test_identify test_pretty_nested_types
+dialect postgres
+TestGenerator::test_overlap_operator
+dialect snowflake
+TestGenerator::test_fallback_function_sql test_fallback_function_var_args_sql
+@ tests/test_jsonpath.py
+dialect
+TestJsonpath::test_cts_file test_identity test_jsonpath test_non_decimal_index_raises_parse_error test_unclosed_filter_raises_parse_error test_union_preserves_falsey_members
+@ tests/test_lineage.py
+bigquery dialect
+TestLineage::test_unpivot_multi_column
+dialect
+TestLineage::test_copy_flag test_lineage test_lineage_all_columns test_lineage_all_columns_set_operation test_lineage_all_columns_shares_nodes_across_outputs test_lineage_all_columns_with_prebuilt_scope test_lineage_cte_name_appears_in_schema test_lineage_cte_self_join_distinct_aliases test_lineage_cte_union test_lineage_external_col test_lineage_join_with_qualified_star test_lineage_join_with_star test_lineage_no_self_loops_with_multi_aliased_union_cte test_lineage_on_node_fires_once_per_node test_lineage_on_node_hook test_lineage_on_node_orders_children_before_parents test_lineage_shared_cte_performance test_lineage_source_union test_lineage_source_with_cte test_lineage_source_with_star test_lineage_sql_with_cte test_lineage_union test_lineage_values test_node_name_doesnt_contain_comment test_pivot_with_alias test_pivot_with_alias_columns test_pivot_with_cte test_pivot_with_implicit_column_of_pivoted_source test_pivot_with_implicit_column_of_pivoted_source_and_cte test_pivot_without_alias test_select_star test_subquery test_trim test_unnest
+dialect duckdb
+TestLineage::test_chained_pivots_consuming_alias_columns test_pivot_with_subquery
+dialect duckdb snowflake teradata
+TestLineage::test_lineage_normalize
+dialect mysql starrocks
+TestLineage::test_table_udtfs
+dialect oracle
+TestLineage::test_ddl_lineage
+dialect snowflake
+TestLineage::test_chained_pivots test_chained_pivots_mixed test_chained_pivots_through_cte test_chained_pivots_with_alias_columns test_lineage_lateral_flatten test_multiple_pivoted_sources test_table_udtf_snowflake test_unpivot test_unpivot_with_alias_columns test_unpivot_with_cte
+@ tests/test_optimize_cross_joins.py
+dialect
+TestOptimizeCrossJoins::test_unconditional_cross_join_is_preserved
+dialect mysql sqlite
+TestOptimizeCrossJoins::test_conditional_cross_joins
+@ tests/test_optimizer.py
+athena bigquery clickhouse databricks dialect duckdb hive mysql postgres presto redshift snowflake spark spark2 trino tsql
+TestOptimizer::test_annotate_funcs
+athena clickhouse dialect duckdb hive presto snowflake trino
+TestOptimizer::test_pushdown_predicates
+bigquery clickhouse databricks dialect duckdb hive mysql postgres presto redshift snowflake spark spark2 sqlite tsql
+TestOptimizer::test_simplify
+bigquery clickhouse databricks dialect duckdb hive snowflake spark spark2
+TestOptimizer::test_case_sensitive_json_dot_access
+bigquery clickhouse dialect
+TestOptimizer::test_expand_alias_refs test_struct_field_case_sensitivity_annotation
+bigquery clickhouse dialect duckdb
+TestOptimizer::test_resolver_column_context
+bigquery clickhouse dialect duckdb hive mysql oracle postgres presto redshift risingwave snowflake spark spark2 starrocks trino
+TestOptimizer::test_qualify_columns
+bigquery databricks dialect duckdb hive presto snowflake spark spark2
+TestOptimizer::test_annotate_types
+bigquery dialect
+TestOptimizer::test_annotate_table_as_struct_bigquery test_bigquery_unnest_alias_shadowing test_correlated_subqueries_annotation test_correlated_unnest_projection_types test_function_annotation test_gen_bracket test_no_pseudocolumn_expansion test_null_coerce_annotation test_qualify_columns_struct_star_expansion_types test_qualify_order_by_expression_types test_qualify_order_by_subquery_types test_qualify_positional_references_types test_qualify_preserves_unsupported_struct_star_operands test_qualify_star_replace_types test_reannotate_struct_subquery_values test_set_operation_annotation test_struct_annotation_bigquery test_unnest_annotation test_unnest_struct_field_annotation test_unnest_type_trace_is_memoized
+bigquery dialect duckdb
+TestOptimizer::test_annotate_dot_parts_of_non_column_roots test_annotate_row_types test_annotate_struct_subquery_values test_qualify_group_by_conflict_bigquery test_qualify_struct_star_json_ordering test_union_annotation test_unnest_offset_annotation
+bigquery dialect duckdb hive
+TestOptimizer::test_scope
+bigquery dialect duckdb hive mysql postgres snowflake spark spark2
+TestOptimizer::test_optimize
+bigquery dialect duckdb hive postgres presto redshift snowflake spark spark2 sqlite teradata trino
+TestOptimizer::test_normalize_identifiers
+bigquery dialect duckdb hive postgres snowflake spark spark2
+TestOptimizer::test_canonicalize_internal_names
+bigquery dialect duckdb postgres risingwave
+TestOptimizer::test_qualify_struct_star_source_types
+bigquery dialect hive mysql postgres redshift snowflake spark spark2 starrocks
+TestOptimizer::test_qualify_tables
+bigquery dialect postgres
+TestOptimizer::test_nested_type_annotation
+bigquery dialect postgres snowflake
+TestOptimizer::test_pushdown_projection
+bigquery dialect snowflake
+TestOptimizer::test_quote_identifiers
+clickhouse dialect
+TestOptimizer::test_merge_any_join_inputs test_nonnull_annotation
+clickhouse dialect duckdb
+TestOptimizer::test_eliminate_positional_joins test_merge_positional_join_inputs test_optimize_match_selecting_joins test_optimize_positional_joins test_unnest_positional_join_predicates
+clickhouse dialect duckdb snowflake
+TestOptimizer::test_merge_asof_join_inputs
+dialect
+TestOptimizer::test_aggfunc_annotation test_annotate_types_caches_positional_aliases test_annotate_types_caches_schema_lookups test_annotate_types_positional_alias_invalidation test_annotate_types_positional_alias_sources test_annotate_types_reuse test_annotate_untyped_binary_operands test_binary_annotation test_cache_annotation test_cast_type_annotation test_concat_annotation test_cte_column_annotation test_deep_ast_type_annotation test_derived_tables_column_annotation test_duplicate_set_operation_projections test_eliminate_ctes test_eliminate_subqueries test_extract_meta_schema_directive test_file_schema test_interval_math_annotation test_isolate_table_selects test_lateral_annotation test_merge_subqueries_copy_budget test_normalization_distance test_optimize_copy test_optimize_copy_root_replacement test_optimize_error_highlighting test_order_by_alias_annotation test_predicate_annotation test_pushdown_cte_alias_columns test_pushdown_dnf_many_predicates test_pushdown_projections_keeps_positionally_aliased_columns test_qualify_columns__with_invisible test_qualify_columns_struct_field_and_source_alias test_qualify_star_rename_unexpanded test_qualify_tables_copies_typed_alias_columns test_recursive_cte test_recursive_cte_annotation test_root_subquery_annotation test_schema_with_spaces test_scope_star_rename test_scope_warning test_semi_anti_join test_simplify_nested test_tpcds test_tpch test_traverse_set_operation_invalid_operand test_type_annotation_cache test_udf_annotation test_unknown_annotation
+dialect duckdb
+TestOptimizer::test_annotate_semi_structured_dot_parts test_eliminate_joins test_journal test_nearest_joins test_optimize_correlated_all test_optimize_in_nulls test_optimize_joins test_optimize_scalar_subquery_key_predicates test_optimize_scalar_subquery_predicate_multiple_rows test_optimize_scalar_subquery_predicates test_optimize_special_joins test_optimize_subqueries_in_aggregates test_optimize_subqueries_in_join_on test_optimize_uncorrelated_exists test_qualify_columns__invalid test_qualify_columns_using_after_outer_join test_qualify_correlated_shadowed_struct_path test_qualify_duckdb_collated_alias test_qualify_json_path_argument_order test_qualify_order_by_alias_fallback test_qualify_order_by_alias_nodes test_qualify_parquet_alias_collision test_qualify_semi_anti_join_alias_shadowing_column test_qualify_semi_anti_join_column_aliases test_qualify_unknown_tvf_table_reference test_simplify_string_comparisons test_unnest_subqueries test_unpivot_cte_annotate_types
+dialect duckdb hive spark spark2
+TestOptimizer::test_map_annotation test_merge_subqueries
+dialect duckdb postgres
+TestOptimizer::test_optimize_distinct_on_predicates test_qualify_order_by_alias_in_subquery test_qualify_order_by_ambiguous_alias test_qualify_order_by_source_columns test_qualify_order_by_using_column test_qualify_order_by_using_column_collision test_values_annotation
+dialect duckdb snowflake
+TestOptimizer::test_annotate_json_dot_parts_preserve_meta test_optimize_snowflake_asof_without_on
+dialect hive snowflake spark spark2
+TestOptimizer::test_validate_columns
+dialect hive spark spark2
+TestOptimizer::test_bracket_annotation
+dialect mysql postgres sqlite tsql
+TestOptimizer::test_canonicalize
+dialect mysql presto
+TestOptimizer::test_typeddiv_annotation
+dialect mysql snowflake starrocks
+TestOptimizer::test_unknown_pivot_columns
+dialect mysql starrocks
+TestOptimizer::test_starrocks_pivot_columns
+dialect postgres
+TestOptimizer::test_pushdown_projections_keeps_recursive_cte_self_referenced_columns test_pushdown_projections_prunes_non_self_referencing_ctes test_qualify_positional_columns_is_snowflake_only test_user_defined_type_annotation
+dialect postgres risingwave
+TestOptimizer::test_qualify_skips_unneeded_annotation test_qualify_struct_star_long_cte_chain
+dialect snowflake
+TestOptimizer::test_annotate_object_construct test_gen test_manually_annotate_snowflake test_multiple_pivots_annotate_types test_normalize test_qualify_snowflake_positional_column_out_of_range test_qualify_snowflake_positional_column_with_visible_schema test_qualify_star_rename_quoted test_qualify_star_replace_rename_unexpanded test_quotes test_semistructured test_udtf_annotation
+dialect sqlite
+TestOptimizer::test_merge_subqueries_match
+@ tests/test_parser.py
+bigquery clickhouse databricks dialect duckdb exasol hive mysql oracle postgres presto redshift snowflake spark spark2 trino tsql
+TestParser::test_text_match_excludes_delimited_tokens
+bigquery clickhouse dialect duckdb postgres redshift snowflake
+TestParser::test_values_as_identifier
+bigquery dialect
+TestParser::test_conditionless_join test_type_literals
+bigquery dialect duckdb hive mysql postgres redshift snowflake spark spark2 starrocks
+TestParser::test_pivot_columns
+bigquery dialect duckdb mysql postgres sqlite
+TestParser::test_window_clause_without_from
+bigquery dialect duckdb presto snowflake trino tsql
+TestParser::test_ref_type
+bigquery dialect duckdb snowflake
+TestParser::test_parse_drop_schema
+bigquery dialect mysql presto
+TestParser::test_transactions
+bigquery dialect snowflake
+TestParser::test_parse_create_schema
+clickhouse databricks dialect doris dremio drill duckdb hive materialize mysql oracle postgres redshift risingwave snowflake spark spark2 sqlite starrocks
+TestParser::test_is_precedence
+clickhouse dialect
+TestParser::test_union
+clickhouse dialect snowflake
+TestParser::test_parse_errors
+databricks dialect hive spark spark2
+TestParser::test_alter_set test_parse_into_grant_principal
+dialect
+TestParser::test_alter_mixed_actions test_collate test_column test_comment_error_n test_comment_error_r test_comments_delete test_comments_delete_cte test_comments_insert test_comments_insert_cte test_comments_select test_comments_select_cte test_comments_table_parts test_comments_update test_comments_update_cte test_create_table_error test_distinct_from test_drop_column test_expression test_float test_grant_revoke_without_privileges test_identify test_lambda_struct test_limit_percent_parses_without_modulo test_max_nodes test_missing_by test_mod_precedence test_multi test_multiple_query_modifiers test_parameter test_parse_concat_ws test_parse_empty test_parse_floats test_parse_into test_parse_into_grant_privilege test_parse_nested test_parse_prop_eq test_parse_properties test_parse_terse_coalesce test_pivot_missing_agg_func test_pretty_config_override test_qualified_function test_quoted_identifier_meta test_ref_identifiers_and_functions test_select test_set_expression test_space test_structs test_table test_tablesample_percent_parses_without_modulo test_token_position_meta test_trailing_comments test_tuple test_udf_meta test_unary_plus test_unnest test_unnest_projection test_update_assignment test_var
+dialect duckdb postgres
+TestParser::test_large_exponent_array_index
+dialect hive
+TestParser::test_command
+dialect hive mysql snowflake spark spark2
+TestParser::test_describe_followed_by_dot
+dialect postgres
+TestParser::test_copy_command_fallback test_no_paren_functions_after_dot test_parse_intervals
+dialect sqlite
+TestParser::test_parse_into_error test_parse_into_errors
+@ tests/test_schema.py
+bigquery clickhouse dialect snowflake tsql
+TestSchema::test_schema_normalization
+bigquery dialect postgres snowflake
+TestSchema::test_cache_normalization
+bigquery dialect postgres snowflake tsql
+TestSchema::test_schema_add_table_error_formatting
+dialect
+TestSchema::test_cache_ignores_aliases test_cache_table_mutation test_custom_schema test_find test_has_column test_ref_type test_same_number_of_qualifiers test_schema test_schema_add_table_invalidates_partial_lookups test_schema_add_table_with_and_without_mapping test_schema_catalog test_schema_db test_schema_get_column_type
+dialect duckdb
+TestSchema::test_cache_does_not_retain_queries
+@ tests/test_serde.py
+dialect
+TestSerde::test_meta test_recursion test_serde test_type_annotations
+@ tests/test_simplify_between.py
+dialect postgres
+TestSimplifyBetween::test_symmetric_constant_bounds
+dialect postgres sqlite
+TestSimplifyBetween::test_symmetric_truth_values_and_grouping
+@ tests/test_time.py
+athena bigquery clickhouse databricks dax dialect doris dremio drill druid duckdb dune exasol fabric hive materialize mysql oracle postgres presto prql redshift risingwave snowflake solr spark spark2 sqlite starrocks tableau teradata trino tsql
+TestTime::test_canonical_time_format_vocabulary
+@ tests/test_tokens.py
+dialect
+TestTokens::test_command test_comment_attachment test_comment_inside_space_keywords test_crlf test_error_msg test_jinja test_partial_token_list test_space_keywords test_token_line_col test_token_repr test_unicode_identifiers
+@ tests/test_transforms.py
+dialect
+TestTransforms::test_eliminate_distinct_on test_eliminate_qualify test_eliminate_semi_and_anti_joins test_eliminate_window_clause test_inherit_struct_field_names test_remove_precision_parameterized_types
+dialect mysql
+TestTransforms::test_remove_unique_constraints
+dialect oracle postgres redshift
+TestTransforms::test_eliminate_join_marks
+@ tests/test_transpile.py
+clickhouse dialect
+TestTranspile::test_types
+clickhouse dialect mysql presto starrocks trino
+TestTranspile::test_sql_security
+dialect
+TestTranspile::test_alias test_alter test_command_identity test_comment_single_line_with_block_close test_error_level test_extract test_identify_lambda test_identity test_if test_leading_comma test_not_range test_paren test_partial test_pretty test_pretty_line_breaks test_recursion test_some test_space test_unary test_weird_chars
+dialect duckdb hive presto spark spark2
+TestTranspile::test_time
+dialect hive presto
+TestTranspile::test_unsupported_level
+dialect mysql snowflake
+TestTranspile::test_comments
+dialect presto
+TestTranspile::test_index_offset test_normalize_name test_with
