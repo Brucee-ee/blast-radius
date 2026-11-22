@@ -27,6 +27,7 @@ RUN python -c "import gzip, shutil, tarfile; \
 tarfile.open('/app/src.tgz').extractall('/app/src', filter='data')" \
  && python -c "import json, marshal; \
 [marshal.dump(json.load(open('/app/data/%s.json' % n)), open('/app/data/%s.marshal' % n, 'wb')) for n in ('map', 'cmp')]" \
+ && python /app/selector.py --imports /app/data/imports.marshal \
  && rm /app/src.tgz /app/data/*.gz /app/data/*.json \
  && python -m compileall -q /app/src/sqlglot /app/selector.py /app/tpgate.py \
  && chmod -R a+rX /app
