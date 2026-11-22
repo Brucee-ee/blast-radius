@@ -65,6 +65,22 @@ def serve(root, data_path):
         parts = line.split()
         if not parts:
             continue
+        if parts[0] == "I":                   # "I <module>": can it be imported?
+            pid = os.fork()
+            if pid == 0:
+                code = 1
+                try:
+                    signal.alarm(60)
+                    import importlib
+                    importlib.import_module(parts[1])
+                    code = 0
+                except BaseException:  # noqa: BLE001
+                    code = 1
+                os._exit(code)
+            _, status = os.waitpid(pid, 0)
+            out.write("RC %d\n" % os.waitstatus_to_exitcode(status))
+            out.flush()
+            continue
         only = {int(x) for x in parts[1].split(",")} if len(parts) > 1 else None
         pid = os.fork()
         if pid == 0:
